@@ -10,7 +10,7 @@
 <p align="center">
   <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/kalepail/wispr-duck?style=flat-square" alt="Release"></a>
   <img src="https://img.shields.io/badge/macOS-14.2%2B-blue?style=flat-square" alt="macOS 14.2+">
-  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT License">
+  <img src="https://img.shields.io/badge/license-Apache%202.0-green?style=flat-square" alt="Apache 2.0 License">
 </p>
 
 ---
@@ -79,4 +79,4 @@ Build and Run with **Cmd+R** in Xcode. Requires Xcode 15+ with the macOS 14.2+ S
 
 ## License
 
-MIT
+Apache 2.0 — see [LICENSE](LICENSE) for details.
