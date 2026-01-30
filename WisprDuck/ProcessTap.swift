@@ -24,7 +24,7 @@ final class ProcessTap {
     // nonisolated(unsafe) opts out of Swift concurrency checks for cross-isolation access.
     nonisolated(unsafe) private var _targetLevel: Float = 1.0
     nonisolated(unsafe) private var _currentLevel: Float = 1.0
-    nonisolated(unsafe) private var _rampCoefficient: Float = 0.0
+    nonisolated(unsafe) private var _rampRate: Float = 0.0 // Max change per sample (linear ramp)
 
     init(processObjectID: AudioObjectID, pid: pid_t, bundleID: String?) {
         self.processObjectID = processObjectID
@@ -46,7 +46,7 @@ final class ProcessTap {
         guard !isRunning else { return true }
 
         _targetLevel = duckLevel
-        _currentLevel = 1.0 // Start at full volume and ramp down for smooth duck-in
+        _currentLevel = duckLevel // Start at duck level — no ramp on duck-in to avoid silence→pop
 
         // 1. Create tap description
         let tapDesc = CATapDescription(stereoMixdownOfProcesses: [processObjectID])
@@ -62,8 +62,8 @@ final class ProcessTap {
             return false
         }
 
-        // 3. Compute ramp coefficient from tap's sample rate
-        _rampCoefficient = computeRampCoefficient(tapID: tapID)
+        // 3. Compute linear ramp rate from tap's sample rate
+        _rampRate = computeRampRate(tapID: tapID)
 
         // 4. Create aggregate device combining real output + tap
         let aggDesc: [String: Any] = [
@@ -146,7 +146,7 @@ final class ProcessTap {
     // MARK: - Audio Processing
 
     /// Called on the IO queue for each audio buffer. Scales input samples by the
-    /// duck level with a one-pole smoothing ramp to prevent clicks.
+    /// duck level with a linear ramp for smooth, constant-rate volume transitions.
     ///
     /// The aggregate device's input buffer layout is:
     ///   [output device's input buffers...] [tap's input buffers...]
@@ -165,7 +165,7 @@ final class ProcessTap {
 
         let target = _targetLevel
         var current = _currentLevel
-        let ramp = _rampCoefficient
+        let rate = _rampRate
 
         for (i, output) in outputs.enumerated() {
             let inputIndex = tapOffset + i
@@ -180,8 +180,10 @@ final class ProcessTap {
             let sampleCount = Int(output.mDataByteSize) / MemoryLayout<Float>.size
 
             for j in 0..<sampleCount {
-                // One-pole low-pass filter for smooth volume transitions (~1s ramp)
-                current += (target - current) * ramp
+                // Linear ramp: move toward target at a fixed rate per sample.
+                // A full 0→1 sweep takes exactly 1 second. Partial sweeps are proportional.
+                let delta = target - current
+                current += max(-rate, min(rate, delta))
                 outSamples[j] = inSamples[j] * current
             }
         }
@@ -211,10 +213,10 @@ final class ProcessTap {
 
     // MARK: - Helpers
 
-    /// Compute the one-pole ramp coefficient for ~1s smoothing at the tap's sample rate.
-    /// Time constant = 200ms → 95% at 600ms, 99% at 1s.
-    /// Formula: coefficient = 1 - exp(-1 / (sampleRate * timeConstant))
-    private func computeRampCoefficient(tapID: AudioObjectID) -> Float {
+    /// Compute the linear ramp rate (max volume change per sample) for 1-second transitions.
+    /// At 48kHz: rate = 1/48000 ≈ 0.00002. A full 0→1 sweep takes exactly 1s.
+    /// Partial sweeps are proportional (e.g., 0.2→1.0 takes 0.8s).
+    private func computeRampRate(tapID: AudioObjectID) -> Float {
         var formatAddress = AudioObjectPropertyAddress(
             mSelector: kAudioTapPropertyFormat,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -228,7 +230,7 @@ final class ProcessTap {
             ? Float(format.mSampleRate)
             : 44100.0 // Fallback
 
-        let timeConstant: Float = 0.200 // 200ms → ~1s to fully settle
-        return 1.0 - expf(-1.0 / (sampleRate * timeConstant))
+        let rampDuration: Float = 1.0 // Full 0→1 sweep in 1 second
+        return 1.0 / (sampleRate * rampDuration)
     }
 }

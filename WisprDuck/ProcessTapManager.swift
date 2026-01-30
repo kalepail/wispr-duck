@@ -229,7 +229,7 @@ final class ProcessTapManager {
 
     /// Smoothly restore audio by ramping volume back to 1.0 before destroying taps.
     /// Taps stay in activeTaps during the fade so duck() can cancel and reuse them.
-    /// The one-pole ramp (~200ms time constant) settles to 99% in ~1s.
+    /// Linear ramp from duck level to 1.0 takes up to 1s; timer gives 1.5s margin.
     func restoreAllWithFade() {
         isDucking = false
 
@@ -238,7 +238,7 @@ final class ProcessTapManager {
             tap.updateDuckLevel(1.0)
         }
 
-        // Schedule tap destruction after the ramp settles.
+        // Schedule tap destruction after the linear ramp completes.
         // If duck() is called before this fires, it cancels the timer and reuses the taps.
         let workItem = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
@@ -249,7 +249,7 @@ final class ProcessTapManager {
             self.fadeOutTimer = nil
         }
         fadeOutTimer = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: workItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: workItem)
     }
 
     /// Update duck level for all active taps.
