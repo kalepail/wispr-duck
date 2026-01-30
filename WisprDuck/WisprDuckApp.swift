@@ -15,18 +15,9 @@ struct WisprDuckApp: App {
         MenuBarExtra {
             MenuBarView(settings: settings, duckController: duckController)
         } label: {
-            Image(systemName: menuBarIcon)
+            Image(duckController.isDucked ? "DuckFootFill" : "DuckFoot")
+                .opacity(settings.isEnabled ? 1.0 : 0.5)
         }
         .menuBarExtraStyle(.window)
-    }
-
-    private var menuBarIcon: String {
-        if !settings.isEnabled {
-            return "speaker.slash"
-        }
-        if duckController.isDucked {
-            return "speaker.wave.1"
-        }
-        return "speaker.wave.3"
     }
 }

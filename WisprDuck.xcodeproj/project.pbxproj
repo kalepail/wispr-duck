@@ -14,6 +14,7 @@
 		A10000010000000000000007 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000007 /* AppSettings.swift */; };
 		A10000010000000000000008 /* ProcessTap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000000A /* ProcessTap.swift */; };
 		A10000010000000000000009 /* ProcessTapManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000000B /* ProcessTapManager.swift */; };
+		A100000100000000000000C0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A100000200000000000000C0 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -27,7 +28,19 @@
 		A10000030000000000000001 /* WisprDuck.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WisprDuck.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1000002000000000000000A /* ProcessTap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessTap.swift; sourceTree = "<group>"; };
 		A1000002000000000000000B /* ProcessTapManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessTapManager.swift; sourceTree = "<group>"; };
+		A100000200000000000000C0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A10000040000000000000002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A100000100000000000000C0 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A10000040000000000000001 /* Frameworks */ = {
@@ -58,6 +71,7 @@
 				A10000020000000000000007 /* AppSettings.swift */,
 				A1000002000000000000000A /* ProcessTap.swift */,
 				A1000002000000000000000B /* ProcessTapManager.swift */,
+				A100000200000000000000C0 /* Assets.xcassets */,
 				A10000020000000000000008 /* Info.plist */,
 				A10000020000000000000009 /* WisprDuck.entitlements */,
 			);
@@ -81,6 +95,7 @@
 			buildPhases = (
 				A10000070000000000000001 /* Sources */,
 				A10000040000000000000001 /* Frameworks */,
+				A10000040000000000000002 /* Resources */,
 			);
 			buildRules = (
 			);
