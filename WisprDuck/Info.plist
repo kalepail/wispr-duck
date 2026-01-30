@@ -4,7 +4,7 @@
 <dict>
 	<key>LSUIElement</key>
 	<true/>
-	<key>NSAppleEventsUsageDescription</key>
-	<string>WisprDuck needs to control music app volume to duck audio when your microphone is active.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>WisprDuck needs to capture system audio to duck app volumes when your microphone is active.</string>
 </dict>
 </plist>

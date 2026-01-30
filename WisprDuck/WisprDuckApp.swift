@@ -7,7 +7,6 @@ struct WisprDuckApp: App {
 
     init() {
         let s = AppSettings()
-        s.initializeDefaultsIfNeeded()
         _settings = StateObject(wrappedValue: s)
         _duckController = StateObject(wrappedValue: DuckController(settings: s))
     }

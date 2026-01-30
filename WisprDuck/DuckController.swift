@@ -4,32 +4,27 @@ import CoreAudio
 
 final class DuckController: ObservableObject {
     @Published private(set) var isDucked: Bool = false
-    @Published private(set) var isSystemVolumeAvailable: Bool = false
-    @Published private(set) var outputDeviceName: String = ""
+    @Published private(set) var audioApps: [AudioApp] = []
 
     let micMonitor = MicMonitor()
-    private let volumeController = VolumeController()
+    private let tapManager = ProcessTapManager()
     private var settings: AppSettings
     private var cancellables = Set<AnyCancellable>()
-    private var restoreTimer: DispatchWorkItem?
-
-    // Output device change monitoring
-    private var outputDeviceListenerBlock: AudioObjectPropertyListenerBlock?
-    private let listenerQueue = DispatchQueue(label: "com.wisprduck.outputmonitor", qos: .userInitiated)
 
     init(settings: AppSettings) {
         self.settings = settings
 
-        // Crash recovery: restore volumes if app was left in ducked state
-        if volumeController.wasLeftDucked {
-            volumeController.restoreFromSavedState()
+        // Populate initial audio process list and start always-on monitoring.
+        // The listener is a single CoreAudio callback (no polling) that fires
+        // only when processes start/stop producing audio.
+        let initialProcesses = tapManager.enumerateAudioProcesses()
+        audioApps = tapManager.audioApps(from: initialProcesses)
+
+        tapManager.setProcessListChangedHandler { [weak self] processes in
+            guard let self = self else { return }
+            self.audioApps = self.tapManager.audioApps(from: processes)
         }
-
-        // Evaluate output device state once at startup
-        refreshOutputDeviceState()
-
-        // Monitor output device changes
-        setupOutputDeviceListener()
+        tapManager.startProcessListMonitoring()
 
         // React to mic state changes
         micMonitor.$isMicActive
@@ -39,72 +34,16 @@ final class DuckController: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // React to isEnabled changes — restore volumes if disabled while ducked
+        // React to isEnabled changes — restore if disabled while ducked
         settings.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self = self else { return }
                 if !self.settings.isEnabled && self.isDucked {
-                    self.restoreTimer?.cancel()
-                    self.restoreTimer = nil
                     self.restore()
                 }
             }
             .store(in: &cancellables)
-    }
-
-    deinit {
-        removeOutputDeviceListener()
-    }
-
-    // MARK: - Output Device Monitoring
-
-    private func setupOutputDeviceListener() {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        outputDeviceListenerBlock = { [weak self] _, _ in
-            DispatchQueue.main.async {
-                self?.refreshOutputDeviceState()
-            }
-        }
-
-        AudioObjectAddPropertyListenerBlock(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address,
-            listenerQueue,
-            outputDeviceListenerBlock!
-        )
-    }
-
-    private func removeOutputDeviceListener() {
-        guard let block = outputDeviceListenerBlock else { return }
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        AudioObjectRemovePropertyListenerBlock(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address,
-            listenerQueue,
-            block
-        )
-        outputDeviceListenerBlock = nil
-    }
-
-    private func refreshOutputDeviceState() {
-        outputDeviceName = volumeController.readDefaultOutputDeviceName()
-        let available = volumeController.checkSystemVolumeAvailable()
-        isSystemVolumeAvailable = available
-
-        // Auto-disable system volume ducking if the new device doesn't support it
-        if !available && settings.duckSystemVolume {
-            settings.duckSystemVolume = false
-        }
     }
 
     // MARK: - Mic State Handling
@@ -113,52 +52,44 @@ final class DuckController: ObservableObject {
         guard settings.isEnabled else { return }
 
         if active {
-            // Cancel any pending restore
-            restoreTimer?.cancel()
-            restoreTimer = nil
-
-            // Duck immediately if not already ducked
+            // Duck immediately — if fading out, this cancels the fade and reuses taps
             if !isDucked {
                 duck()
             }
         } else {
-            // Start debounce timer for restore
-            restoreTimer?.cancel()
-            let workItem = DispatchWorkItem { [weak self] in
-                DispatchQueue.main.async {
-                    self?.restore()
-                }
+            // Restore with fade — the 1s ramp acts as a natural buffer
+            if isDucked {
+                restore()
             }
-            restoreTimer = workItem
-            DispatchQueue.main.asyncAfter(
-                deadline: .now() + settings.debounceDelay,
-                execute: workItem
-            )
         }
     }
 
     private func duck() {
-        let useSystemVolume = settings.duckSystemVolume && isSystemVolumeAvailable
-        // System volume mode covers everything — skip per-app to avoid double-ducking
-        let apps = useSystemVolume ? [] : settings.enabledApps
-        volumeController.duckAll(
-            apps: apps,
-            duckLevel: settings.duckLevel,
-            duckSystem: useSystemVolume
+        let duckLevel = Float(settings.duckLevel) / 100.0
+        let selectedBundleIDs = settings.enabledBundleIDs
+        let duckAll = settings.duckAllAudio
+
+        tapManager.duck(
+            bundleIDs: selectedBundleIDs,
+            duckAll: duckAll,
+            duckLevel: duckLevel
         )
         isDucked = true
     }
 
     private func restore() {
-        volumeController.restoreAll()
+        tapManager.restoreAllWithFade()
         isDucked = false
     }
 
+    /// Update duck level on active taps when the slider changes.
+    func updateDuckLevel(_ level: Int) {
+        tapManager.updateDuckLevel(Float(level) / 100.0)
+    }
+
     func restoreAndStop() {
-        restoreTimer?.cancel()
-        restoreTimer = nil
-        if isDucked {
-            restore()
-        }
+        // Always clean up — taps may still be alive during a fade-out even when isDucked is false
+        tapManager.restoreAll()
+        isDucked = false
     }
 }
