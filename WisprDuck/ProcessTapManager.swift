@@ -135,6 +135,8 @@ final class ProcessTapManager {
 
     /// Returns deduplicated apps grouped by root app bundle ID.
     /// "Google Chrome Helper (Renderer)" groups under "Google Chrome".
+    /// Filters to regular apps only (those with a Dock icon), hiding system
+    /// services like PowerChime, callservicesd, loginwindow, etc.
     func audioApps(from processes: [AudioProcess]) -> [AudioApp] {
         var seen = Set<String>()
         var apps: [AudioApp] = []
@@ -145,10 +147,13 @@ final class ProcessTapManager {
             guard !seen.contains(rootBID) else { continue }
             seen.insert(rootBID)
 
-            // Use the root app's name from running applications
+            // Only show regular apps (Dock icon / real UI) — filters out
+            // system daemons, XPC services, and menu-bar-only accessories.
             let rootApp = NSWorkspace.shared.runningApplications.first {
                 $0.bundleIdentifier == rootBID
             }
+            guard rootApp?.activationPolicy == .regular else { continue }
+
             let name = rootApp?.localizedName ?? process.name
             apps.append(AudioApp(bundleID: rootBID, name: name))
         }
