@@ -293,8 +293,12 @@ final class ProcessTapManager {
         )
 
         processListListenerBlock = { [weak self] _, _ in
+            guard let self else { return }
+            // Enumerate on the listener queue (CoreAudio + NSRunningApplication lookups)
+            // to avoid blocking the main thread during process list churn.
+            let processes = self.enumerateAudioProcesses()
             DispatchQueue.main.async {
-                self?.handleProcessListChanged()
+                self.handleProcessListChanged(with: processes)
             }
         }
 
@@ -373,10 +377,7 @@ final class ProcessTapManager {
         _ = duck(bundleIDs: bundleIDs, duckAll: duckAll, duckLevel: level)
     }
 
-    private func handleProcessListChanged() {
-        // Single enumeration, shared between UI update and tap management
-        let processes = enumerateAudioProcesses()
-
+    private func handleProcessListChanged(with processes: [AudioProcess]) {
         // Always notify UI so the app list stays current
         onProcessListChanged?(processes)
 
