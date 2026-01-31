@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner-fun-2.png" width="700" alt="WisprDuck — Installing... 45% Complete">
+  <img src="site/public/banner-fun-3.png" width="700" alt="WisprDuck">
 </p>
 
 <h1 align="center">Shhh... Ducking Volume</h1>
