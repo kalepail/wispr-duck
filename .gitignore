@@ -10,5 +10,9 @@ xcuserdata/
 *.swp
 *~
 
+# Site
+site/node_modules/
+site/dist/
+
 # Claude
 .claude/

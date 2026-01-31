@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --color-duck-blue: #1a3a5c;
+  --color-duck-teal: #2dd4bf;
+  --color-duck-green: #4ade80;
+  --color-duck-orange: #fb923c;
+  --color-duck-pink: #f472b6;
+  --color-duck-purple: #a78bfa;
+  --color-duck-yellow: #facc15;
+  --color-duck-cyan: #22d3ee;
+  --color-circuit: #0f172a;
+  --color-circuit-line: #1e40af;
+  --color-circuit-glow: #3b82f6;
+}
+
+/* Respect reduced-motion preferences for scroll */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-circuit);
+  color: white;
+  color-scheme: dark;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background-color: var(--color-duck-teal);
+  color: var(--color-circuit);
+}
+
+/* Skip link — visible only on keyboard focus */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  z-index: 100;
+}
+
+.skip-link:focus {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: auto;
+  height: auto;
+  padding: 0.75rem 1.5rem;
+  background-color: var(--color-duck-teal);
+  color: var(--color-circuit);
+  font-weight: 700;
+  font-size: 0.875rem;
+  z-index: 100;
+  outline: 2px solid white;
+  outline-offset: 2px;
+}
+
+/* Global focus-visible ring for interactive elements */
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--color-duck-teal);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Disable animations when user prefers reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

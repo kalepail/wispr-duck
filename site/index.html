@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/assets/duck-foot.svg" type="image/svg+xml" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WisprDuck — Auto-duck background audio when your mic is active</title>
+    <meta name="description" content="WisprDuck is a lightweight macOS menu bar utility that automatically reduces background audio volume when your microphone is active. Perfect for voice-to-text, video calls, and screen recordings." />
+    <meta name="keywords" content="WisprDuck, macOS, audio ducking, microphone, volume control, menu bar, WisprFlow, voice-to-text, video calls" />
+    <meta name="author" content="Kale Pale" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="WisprDuck — Shhh... Ducking volume." />
+    <meta property="og:description" content="A lightweight macOS menu bar app that auto-ducks background audio when your mic is active." />
+    <meta property="og:image" content="/assets/banner-fun-2.png" />
+    <meta property="og:url" content="https://wisprduck.com" />
+    <meta property="og:site_name" content="WisprDuck" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="WisprDuck — Shhh... Ducking volume." />
+    <meta name="twitter:description" content="A lightweight macOS menu bar app that auto-ducks background audio when your mic is active." />
+    <meta name="twitter:image" content="/assets/banner-fun-2.png" />
+    <meta name="twitter:creator" content="@kalepail" />
+
+    <link rel="canonical" href="https://wisprduck.com" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="color-scheme" content="dark" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "WisprDuck",
+      "operatingSystem": "macOS 14.2+",
+      "applicationCategory": "UtilitiesApplication",
+      "description": "Lightweight macOS menu bar utility that automatically reduces background audio volume when your microphone is active.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "author": {
+        "@type": "Person",
+        "name": "Kale Pale",
+        "url": "https://x.com/kalepail"
+      },
+      "license": "https://www.apache.org/licenses/LICENSE-2.0",
+      "downloadUrl": "https://github.com/kalepail/wispr-duck/releases",
+      "softwareVersion": "1.0",
+      "url": "https://wisprduck.com"
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What does WisprDuck do?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "WisprDuck is a macOS menu bar utility that automatically reduces the volume of background audio (music, videos, etc.) whenever your microphone becomes active. It's perfect for voice-to-text tools like Wispr Flow, video calls, and screen recordings."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What macOS version does WisprDuck require?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "WisprDuck requires macOS 14.2 (Sonoma) or later, as it uses the Core Audio process taps API introduced in that version."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is WisprDuck free?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes, WisprDuck is completely free and open source under the Apache 2.0 license. You can download it from GitHub."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What happens if WisprDuck crashes?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "WisprDuck is crash-safe by design. It uses Core Audio's mutedWhenTapped behavior, so audio automatically restores to normal volume if the app quits unexpectedly."
+          }
+        }
+      ]
+    }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
