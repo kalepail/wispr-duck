@@ -1,12 +1,10 @@
 import Foundation
 import Combine
-import CoreAudio
 
 final class DuckController: ObservableObject {
     @Published private(set) var isDucked: Bool = false
     @Published private(set) var audioApps: [AudioApp] = []
     @Published private(set) var triggerEligibleApps: [AudioApp] = []
-
     let micMonitor = MicMonitor()
     private let tapManager = ProcessTapManager()
     private var settings: AppSettings
@@ -31,7 +29,7 @@ final class DuckController: ObservableObject {
         triggerEligibleApps = tapManager.audioApps(from: initialProcesses, includeAccessory: true)
 
         tapManager.setProcessListChangedHandler { [weak self] processes in
-            guard let self = self else { return }
+            guard let self else { return }
             self.audioApps = self.tapManager.audioApps(from: processes)
             self.triggerEligibleApps = self.tapManager.audioApps(from: processes, includeAccessory: true)
         }
@@ -60,7 +58,7 @@ final class DuckController: ObservableObject {
         settings.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                guard let self = self else { return }
+                guard let self else { return }
                 if !self.settings.isEnabled && self.isDucked {
                     self.restore()
                 }
@@ -95,7 +93,7 @@ final class DuckController: ObservableObject {
     private func duck() {
         let duckLevel = Float(settings.duckLevel) / 100.0
         let selectedBundleIDs = settings.enabledBundleIDs
-        let duckAll = settings.duckAllAudio
+        let duckAll = settings.duckAllApps
 
         tapManager.duck(
             bundleIDs: selectedBundleIDs,

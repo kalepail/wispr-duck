@@ -9,7 +9,6 @@ import CoreAudio
 final class ProcessTap {
     let processObjectID: AudioObjectID
     let pid: pid_t
-    let bundleID: String?
 
     private var tapID: AudioObjectID = kAudioObjectUnknown
     private var aggregateDeviceID: AudioObjectID = kAudioObjectUnknown
@@ -26,10 +25,9 @@ final class ProcessTap {
     nonisolated(unsafe) private var _currentLevel: Float = 1.0
     nonisolated(unsafe) private var _rampRate: Float = 0.0 // Max change per sample (linear ramp)
 
-    init(processObjectID: AudioObjectID, pid: pid_t, bundleID: String?) {
+    init(processObjectID: AudioObjectID, pid: pid_t) {
         self.processObjectID = processObjectID
         self.pid = pid
-        self.bundleID = bundleID
     }
 
     deinit {

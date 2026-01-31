@@ -60,7 +60,7 @@ struct MenuBarView: View {
             // Duck target
             AppFilterSection(
                 title: "Duck All Apps",
-                isAll: $settings.duckAllAudio,
+                isAll: $settings.duckAllApps,
                 allCaption: "All audio apps are ducked",
                 selectedLabel: "Ducking",
                 unselectedLabel: "Not ducking",
@@ -73,9 +73,21 @@ struct MenuBarView: View {
 
             Divider()
 
-            Button("Quit WisprDuck") {
-                duckController.restoreAndStop()
-                NSApplication.shared.terminate(nil)
+            HStack {
+                Link("WisprDuck v\(Bundle.shortVersion)", destination: URL(string: "https://wisprduck.com")!)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .underline()
+                Spacer()
+                Button("Permissions") {
+                    NSWorkspace.shared.open(privacySettingsURL)
+                }
+                .footerButtonStyle()
+                Button("Quit") {
+                    duckController.restoreAndStop()
+                    NSApplication.shared.terminate(nil)
+                }
+                .footerButtonStyle()
             }
         }
         .padding(16)
@@ -86,7 +98,7 @@ struct MenuBarView: View {
     private var statusColor: Color {
         if !settings.isEnabled { return .gray }
         if duckController.isDucked { return .orange }
-        return .green
+        return .mallardGreen
     }
 
     private var statusText: String {
@@ -94,6 +106,34 @@ struct MenuBarView: View {
         if duckController.isDucked { return "Ducked" }
         if duckController.micMonitor.isMicActive { return "Mic Active" }
         return "Monitoring"
+    }
+}
+
+// MARK: - Color Extension
+
+extension Color {
+    static let mallardGreen = Color(red: 0.075, green: 0.42, blue: 0.227)
+}
+
+// MARK: - Bundle Extension
+
+extension Bundle {
+    static var shortVersion: String {
+        main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+    }
+}
+
+// MARK: - Footer Button Style
+
+private extension View {
+    func footerButtonStyle() -> some View {
+        self
+            .font(.caption)
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 4))
     }
 }
 
@@ -126,13 +166,12 @@ private struct AppFilterSection: View {
             Toggle(title, isOn: $isAll)
             Text(allCaption)
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
 
             if !isAll {
                 // Selected apps
                 AppSublist(
                     label: selectedLabel,
-                    count: selected.count,
                     apps: selected,
                     emptyText: emptySelected,
                     isEnabled: isEnabled,
@@ -142,7 +181,6 @@ private struct AppFilterSection: View {
                 // Unselected apps
                 AppSublist(
                     label: unselectedLabel,
-                    count: unselected.count,
                     apps: unselected,
                     emptyText: emptyUnselected,
                     isEnabled: isEnabled,
@@ -155,7 +193,6 @@ private struct AppFilterSection: View {
 
 private struct AppSublist: View {
     let label: String
-    let count: Int
     let apps: [AudioApp]
     let emptyText: String
     let isEnabled: (String) -> Bool
@@ -166,8 +203,8 @@ private struct AppSublist: View {
             HStack(spacing: 4) {
                 Text(label)
                     .font(.caption)
-                    .foregroundColor(.secondary)
-                Text("(\(count))")
+                    .foregroundStyle(.secondary)
+                Text("(\(apps.count))")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }

@@ -1,4 +1,3 @@
-import Foundation
 import CoreAudio
 import Combine
 import AppKit
@@ -324,20 +323,6 @@ final class MicMonitor: ObservableObject {
         return objectIDs
     }
 
-    private func pidForProcessObject(_ objectID: AudioObjectID) -> pid_t? {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioProcessPropertyPID,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var pid: pid_t = 0
-        var size = UInt32(MemoryLayout<pid_t>.size)
-
-        let status = AudioObjectGetPropertyData(objectID, &address, 0, nil, &size, &pid)
-        guard status == noErr, pid > 0 else { return nil }
-        return pid
-    }
-
     private func isProcessRunningInput(_ objectID: AudioObjectID) -> Bool {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioProcessPropertyIsRunningInput,
@@ -361,17 +346,6 @@ final class MicMonitor: ObservableObject {
             return parentApp.bundleIdentifier
         }
         return nil
-    }
-
-    private func parentPID(of pid: pid_t) -> pid_t? {
-        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
-        var info = kinfo_proc()
-        var size = MemoryLayout<kinfo_proc>.stride
-        guard sysctl(&mib, UInt32(mib.count), &info, &size, nil, 0) == 0, size > 0 else {
-            return nil
-        }
-        let ppid = info.kp_eproc.e_ppid
-        return ppid > 1 ? ppid : nil
     }
 
     // MARK: - Device Helpers

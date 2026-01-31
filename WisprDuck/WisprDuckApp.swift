@@ -4,6 +4,7 @@ import SwiftUI
 struct WisprDuckApp: App {
     @StateObject private var settings: AppSettings
     @StateObject private var duckController: DuckController
+    @Environment(\.openWindow) private var openWindow
 
     init() {
         let s = AppSettings()
@@ -15,9 +16,25 @@ struct WisprDuckApp: App {
         MenuBarExtra {
             MenuBarView(settings: settings, duckController: duckController)
         } label: {
-            Image(duckController.isDucked ? "DuckFootFill" : "DuckFoot")
+            Image("DuckFoot")
                 .opacity(settings.isEnabled ? 1.0 : 0.5)
+                .task {
+                    if !settings.hasCompletedOnboarding {
+                        NSApp.setActivationPolicy(.regular)
+                        openWindow(id: "welcome")
+                    }
+                }
         }
         .menuBarExtraStyle(.window)
+
+        Window("Welcome", id: "welcome") {
+            WelcomeView(settings: settings)
+                .onDisappear {
+                    NSApp.setActivationPolicy(.accessory)
+                }
+        }
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+        .windowStyle(.hiddenTitleBar)
     }
 }

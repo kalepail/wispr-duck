@@ -1,4 +1,3 @@
-import Foundation
 import SwiftUI
 
 private let duckBundleIDsKey = "duckBundleIDs3"
@@ -7,8 +6,9 @@ private let triggerBundleIDsKey = "triggerBundleIDs3"
 final class AppSettings: ObservableObject {
     @AppStorage("isEnabled") var isEnabled: Bool = true
     @AppStorage("duckLevel") var duckLevel: Int = 10
-    @AppStorage("duckAllApps") var duckAllAudio: Bool = false
+    @AppStorage("duckAllApps") var duckAllApps: Bool = false
     @AppStorage("triggerAllApps2") var triggerAllApps: Bool = false
+    @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding: Bool = false
 
     // MARK: - Default Selections
 

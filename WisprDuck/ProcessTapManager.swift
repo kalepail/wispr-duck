@@ -1,4 +1,3 @@
-import Foundation
 import CoreAudio
 import AppKit
 
@@ -197,7 +196,7 @@ final class ProcessTapManager {
         duckAllMode = duckAll
 
         // Update existing taps (e.g. re-ducking after a cancelled fade-out)
-        for (_, tap) in activeTaps {
+        for tap in activeTaps.values {
             tap.updateDuckLevel(duckLevel)
         }
 
@@ -212,8 +211,7 @@ final class ProcessTapManager {
         for process in toDuck {
             let tap = ProcessTap(
                 processObjectID: process.objectID,
-                pid: process.pid,
-                bundleID: process.bundleID
+                pid: process.pid
             )
             if tap.start(outputDeviceUID: outputUID, duckLevel: duckLevel) {
                 activeTaps[process.pid] = tap
@@ -228,7 +226,7 @@ final class ProcessTapManager {
         fadeOutTimer?.cancel()
         fadeOutTimer = nil
 
-        for (_, tap) in activeTaps {
+        for tap in activeTaps.values {
             tap.stop()
         }
         activeTaps.removeAll()
@@ -245,18 +243,18 @@ final class ProcessTapManager {
         // currentDuckLevel→1.0 takes (1 - currentDuckLevel) * 1.0 seconds.
         // Fire early so scheduling delay lands the tap destruction right at 100%.
         let rampDuration: Double = 1.0
-        let estimatedFadeTime = Double(1.0 - currentDuckLevel) * rampDuration - 0.25
+        let estimatedFadeTime = max(0, Double(1.0 - currentDuckLevel) * rampDuration - 0.25)
 
         // Ramp all taps toward full volume
-        for (_, tap) in activeTaps {
+        for tap in activeTaps.values {
             tap.updateDuckLevel(1.0)
         }
 
         // Schedule tap destruction just after the linear ramp completes.
         // If duck() is called before this fires, it cancels the timer and reuses the taps.
         let workItem = DispatchWorkItem { [weak self] in
-            guard let self = self else { return }
-            for (_, tap) in self.activeTaps {
+            guard let self else { return }
+            for tap in self.activeTaps.values {
                 tap.stop()
             }
             self.activeTaps.removeAll()
@@ -269,7 +267,7 @@ final class ProcessTapManager {
     /// Update duck level for all active taps.
     func updateDuckLevel(_ level: Float) {
         currentDuckLevel = level
-        for (_, tap) in activeTaps {
+        for tap in activeTaps.values {
             tap.updateDuckLevel(level)
         }
     }
@@ -341,8 +339,7 @@ final class ProcessTapManager {
         for process in toDuck {
             let tap = ProcessTap(
                 processObjectID: process.objectID,
-                pid: process.pid,
-                bundleID: process.bundleID
+                pid: process.pid
             )
             if tap.start(outputDeviceUID: outputUID, duckLevel: currentDuckLevel) {
                 activeTaps[process.pid] = tap
@@ -392,34 +389,6 @@ final class ProcessTapManager {
         status = AudioObjectGetPropertyData(deviceID, &uidAddress, 0, nil, &uidSize, &uid)
         guard status == noErr else { return nil }
         return uid as String
-    }
-
-    // MARK: - PID Translation
-
-    /// Get the parent PID of a process via sysctl.
-    private func parentPID(of pid: pid_t) -> pid_t? {
-        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
-        var info = kinfo_proc()
-        var size = MemoryLayout<kinfo_proc>.stride
-        guard sysctl(&mib, UInt32(mib.count), &info, &size, nil, 0) == 0, size > 0 else {
-            return nil
-        }
-        let ppid = info.kp_eproc.e_ppid
-        return ppid > 1 ? ppid : nil
-    }
-
-    private func pidForProcessObject(_ objectID: AudioObjectID) -> pid_t? {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioProcessPropertyPID,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var pid: pid_t = 0
-        var size = UInt32(MemoryLayout<pid_t>.size)
-
-        let status = AudioObjectGetPropertyData(objectID, &address, 0, nil, &size, &pid)
-        guard status == noErr, pid > 0 else { return nil }
-        return pid
     }
 
     deinit {
