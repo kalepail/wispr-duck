@@ -6,6 +6,10 @@
 	<string>AppIcon</string>
 	<key>CFBundleIconName</key>
 	<string>AppIcon</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>WisprDuck needs permission to capture and lower other apps’ audio while your mic is active.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>WisprDuck needs access to microphone activity to duck background audio when you speak.</string>
 	<key>LSUIElement</key>
 	<true/>
 </dict>

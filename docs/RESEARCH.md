@@ -18,7 +18,7 @@ Wispr Flow is a cloud-based voice-to-text app for macOS. Key technical details r
 - **Visual indicator**: A "Flow bar" at the bottom of the screen shows animated white level bars while recording.
 - **Audio cue**: A "ping" sound plays when recording starts.
 - **Microphone access**: Uses standard macOS Core Audio for mic input. Requires microphone permission via System Settings > Privacy & Security > Microphone.
-- **No public hooks/API for recording state**: Wispr Flow does not expose an API, AppleScript dictionary, notification, or callback for external apps to detect when it's actively recording. There is no documented way to programmatically query its recording state.
+- **No documented public hooks/API for recording state**: As of this research, Wispr Flow does not document an API, AppleScript dictionary, notification, or callback for external apps to detect when it's actively recording.
 - **Standard mic usage**: When recording, Wispr Flow opens the default input device through Core Audio like any other app, which means macOS *does* know the mic is in use (orange dot appears).
 
 **Key insight**: We don't need to detect Wispr Flow specifically. We just need to detect when the **system microphone becomes active**. Since Wispr Flow is the primary dictation app, mic-active = ducking time.
@@ -80,7 +80,11 @@ AudioObjectAddPropertyListenerBlock(deviceID, &runningAddress, DispatchQueue.mai
 
 - **Also monitor default device changes**: If the user switches their input device (e.g., plugs in an external mic), you need to re-register the listener on the new device. Listen for `kAudioHardwarePropertyDefaultInputDevice` changes on `kAudioObjectSystemObject`.
 - **Debouncing**: When the mic goes idle, add a short delay (1-3 seconds) before restoring volume. This prevents rapid volume toggling if Wispr Flow briefly releases and re-acquires the mic between dictations.
-- **No mic permission needed**: Simply *listening* for the `kAudioDevicePropertyDeviceIsRunningSomewhere` property does **not** require microphone permission. You're just checking a boolean flag, not accessing the audio stream.
+- **Privacy permission note**: This listener does not access audio samples, but macOS microphone privacy rules still apply to any app that requests mic access or uses APIs that trigger a mic permission prompt. Include `NSMicrophoneUsageDescription` and test on target macOS versions.
+
+References:
+- https://docs.unity.com/ugs/en-us/manual/vivox-core/manual/Core/developer-guide/macos/macos-requirements
+- https://support.unity.com/hc/en-us/articles/4431473872020-Vivox-How-to-Request-check-iOS-macOS-microphone-permission-in-Unity
 
 ### Alternative Approaches (Not Recommended for This Use Case)
 
@@ -93,9 +97,9 @@ AudioObjectAddPropertyListenerBlock(deviceID, &runningAddress, DispatchQueue.mai
 
 ---
 
-## Volume Control: How to Duck the Music
+## Volume Control: Historical Notes (Deprecated)
 
-### Recommended Approach: AppleScript via NSAppleScript/Process
+### AppleScript via NSAppleScript/Process
 
 The simplest and most effective approach for music apps is AppleScript. Both Apple Music and Spotify expose volume control through their scripting dictionaries.
 
@@ -371,7 +375,7 @@ Or even a **Hammerspoon script** (Lua-based macOS automation):
 | Aspect | Verdict |
 |--------|---------|
 | **Is it possible?** | Yes, fully feasible |
-| **Detect mic usage** | Proven technique via `kAudioDevicePropertyDeviceIsRunningSomewhere` — no mic permission needed, event-driven, near-instant |
+| **Detect mic usage** | Proven technique via `kAudioDevicePropertyDeviceIsRunningSomewhere` — event-driven, near-instant; still include mic usage strings for privacy compliance |
 | **Control music volume** | Easy via AppleScript for Spotify & Apple Music |
 | **Complexity** | Low — the core logic is ~200 lines of Swift |
 | **Dependencies** | None — pure macOS APIs (CoreAudio + NSAppleScript) |

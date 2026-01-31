@@ -3,6 +3,7 @@ import CoreAudio
 
 /// Manages a single Core Audio process tap: intercepts one process's audio output,
 /// scales it by a duck factor, and plays it to the real output device.
+/// Requires Screen & System Audio Recording permission and NSAudioCaptureUsageDescription.
 ///
 /// Lifecycle: init → start() → updateDuckLevel() → stop() → deinit
 /// Cleanup order: AudioDeviceStop → DestroyIOProcID → DestroyAggregateDevice → DestroyProcessTap

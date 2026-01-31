@@ -4,15 +4,12 @@
 
 This document captures research on how to control per-app audio volume on macOS, specifically for ducking background audio when a microphone becomes active. This is relevant for adding browser ducking (YouTube, Spotify Web, etc.) and arbitrary app ducking beyond the current AppleScript-based music app control.
 
-## Current Implementation (v1)
+## Current Implementation (v2)
 
-WisprDuck currently uses **AppleScript** to get/set volume on music apps that expose scripting interfaces:
-- Spotify (`sound volume`)
-- Apple Music (`sound volume`)
-- VLC (`audio volume`)
-- Vox (`player volume`)
+WisprDuck now uses **Core Audio process taps** (macOS 14.2+) for per‑app ducking, as described below. This replaces the earlier AppleScript-only approach and supports any app that appears in the Core Audio process list.
 
-This works well for dedicated music apps but does **not** cover browsers or arbitrary apps.
+### Historical Notes (Deprecated)
+- Early versions used AppleScript volume control for select music apps (Spotify, Apple Music, VLC, Vox). That approach is no longer the primary implementation.
 
 ## Approach 1: Core Audio Process Taps (macOS 14.2+)
 
@@ -20,7 +17,7 @@ This works well for dedicated music apps but does **not** cover browsers or arbi
 
 ### What It Is
 
-Apple introduced `AudioHardwareCreateProcessTap` in macOS 14.2 (refined in 14.4). It allows tapping into another process's audio stream, reading the samples, and optionally muting the original output. You can then scale the samples (for volume control) and play them to the real output device.
+Apple introduced `AudioHardwareCreateProcessTap` in macOS 14.2. It allows tapping into another process's audio stream, reading the samples, and optionally muting the original output. You can then scale the samples (for volume control) and play them to the real output device.
 
 ### Architecture
 
@@ -82,8 +79,12 @@ func ioCallback(..., ioData: UnsafeMutablePointer<AudioBufferList>, ...) -> OSSt
 
 ### Permissions Required
 
-- **System Audio Access** permission (macOS 14.4+): System Settings > Privacy & Security > System Audio Recording
-- Add `NSAudioCaptureUsageDescription` to Info.plist
+- **Screen & System Audio Recording** permission in System Settings > Privacy & Security. Apple documents this pane and notes that users can allow audio-only access.
+- Add `NSAudioCaptureUsageDescription` to Info.plist. The AudioCap sample uses this key for the system-audio capture permission prompt (and notes it is not exposed in Xcode’s plist key dropdown), and also notes there is no public API to request/check that permission.
+
+References:
+- https://support.apple.com/guide/mac-help/mchld6aa7d23/mac
+- https://github.com/insidegui/AudioCap
 
 ### Reference Implementations
 
@@ -93,14 +94,13 @@ func ioCallback(..., ioData: UnsafeMutablePointer<AudioBufferList>, ...) -> OSSt
 - **[Core Audio Tap API gist](https://gist.github.com/sudara/34f00efad69a7e8ceafa078ea0f76f6f)** — Minimal example.
 
 ### Pros
-- Per-app granular volume control for ANY app (browsers, games, etc.)
-- Apple-sanctioned public API
+- Per-app granular volume control for any app that appears in the Core Audio process list
+- Public Core Audio API (no private frameworks required)
 - No driver installation, no admin privileges, no restart
-- App Store compatible
-- User sees a standard permission prompt
+- Standard macOS permission prompt for system audio capture
 
 ### Cons
-- Requires macOS 14.2+ (14.4+ for stable behavior)
+- Requires macOS 14.2+
 - API is poorly documented (must read C headers: `CoreAudio/AudioHardware.h`)
 - More complex implementation (aggregate devices, IO callbacks, audio buffer manipulation)
 - Some reported bugs with multi-channel devices
@@ -160,7 +160,7 @@ Rogue Amoeba's commercial Audio Routing Kit SDK. Used by SoundSource. Provides a
 
 ---
 
-## Approach 4: System Volume Ducking (Current v2 Implementation)
+## Approach 4: System Volume Ducking (Optional / Deprecated)
 
 ### What It Is
 
@@ -188,7 +188,7 @@ Duck the macOS system output volume globally. Simple, works for all audio.
 - Not per-app: ducks EVERYTHING including the mic-using app's audio (e.g., the other person in a Zoom call)
 - User may not want conferencing audio ducked
 
-**Verdict:** Good as a simple toggle option alongside per-app control. Currently implemented as "Duck System Volume" in WisprDuck.
+**Verdict:** Useful as a fallback for legacy macOS or edge cases, but not the primary implementation.
 
 ---
 
@@ -228,11 +228,11 @@ References:
 
 ---
 
-## Recommended Roadmap
+## Recommended Roadmap (Updated)
 
-1. **v1 (Done):** Per-app AppleScript volume control for music apps (Spotify, Apple Music, VLC, Vox)
-2. **v2 (Current):** Add system volume ducking toggle as a catch-all for browsers and other apps
-3. **v3 (Future):** Implement Core Audio Process Taps for true per-app control of any audio source, including browsers. Use FineTune as reference implementation. Requires macOS 14.2+ minimum.
+1. **Current:** Core Audio Process Taps for per-app control (macOS 14.2+).
+2. **Optional:** System volume ducking as a fallback mode if desired.
+3. **Legacy:** AppleScript volume control kept only for historical reference.
 
 ## Comparison Table
 

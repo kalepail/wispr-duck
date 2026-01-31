@@ -40,6 +40,7 @@ No manual toggling. No keyboard shortcuts. Just works.
 3. Launch WisprDuck
 4. On first launch: right-click the app → **Open** (required for unsigned apps)
 5. Grant **microphone access** when prompted
+6. Grant **Screen & System Audio Recording** access (audio-only is supported)
 
 > WisprDuck runs as a menu bar app — no Dock icon. Look for the duck foot in your menu bar.
 
@@ -69,7 +70,8 @@ Click the duck foot icon in your menu bar:
 ## Requirements
 
 - **macOS 14.2+** (Sonoma) — required for Core Audio process taps
-- **Microphone permission** — WisprDuck reads a device-level boolean to detect mic activity, but macOS still requires the permission grant
+- **Microphone permission** — required to access microphone state on macOS
+- **Screen & System Audio Recording permission** — required to capture and scale other apps’ audio
 
 ## Building from Source
 

@@ -2,6 +2,7 @@ import Foundation
 import CoreAudio
 
 /// URL for System Settings > Privacy & Security > Screen & System Audio Recording.
+/// macOS allows audio-only access in this pane.
 let privacySettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!
 
 /// Get the PID for a Core Audio process object.

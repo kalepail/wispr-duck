@@ -16,7 +16,7 @@ Scope: Local codebase review + focused permissions research for macOS 14.2+ Core
 (Full URLs are listed in the Sources section below.)
 
 ## Summary
-The application architecture is consistent with the process-tap approach described in docs/AUDIO-DUCKING-APPROACHES.md and the mic monitoring approach described in docs/RESEARCH.md. The app appears functionally solid, but there are a few correctness and production-readiness issues that should be addressed. The permissions-related findings below were re-validated against published sources.
+The application architecture is consistent with the process-tap approach described in docs/AUDIO-DUCKING-APPROACHES.md and the mic monitoring approach described in docs/RESEARCH.md. The app appears functionally solid, but there are a few correctness and production-readiness issues that should be addressed. The permissions-related findings below were re-validated against published sources listed at the end of this report.
 
 ## Findings (Code/Behavior)
 
@@ -26,15 +26,11 @@ The application architecture is consistent with the process-tap approach describ
    - Affected code: MicMonitor.swift
 
 ### High
-2) Info.plist is missing usage description keys for mic/system audio permissions.
-   - Current Info.plist has only app icon + LSUIElement; no usage description keys.
-   - Affected file: WisprDuck/Info.plist
-
-3) “Ducked” UI state can be true even when no taps are active.
+2) “Ducked” UI state can be true even when no taps are active.
    - If ducking is enabled but there are zero eligible targets, duck() still flips isDucked to true.
    - Affected code: DuckController.swift, ProcessTapManager.swift
 
-4) Output device changes during an active duck session are not handled.
+3) Output device changes during an active duck session are not handled.
    - Taps are created with the output device UID at duck time; switching outputs can break routing or silence audio.
    - Affected code: ProcessTapManager.swift
 
@@ -50,29 +46,26 @@ The application architecture is consistent with the process-tap approach describ
 ## Permissions Findings (Fact-Checked)
 
 ### 1) Microphone access requires NSMicrophoneUsageDescription
-- Unity’s macOS requirements documentation states that NSMicrophoneUsageDescription must be included in the macOS Info.plist for microphone access.
-- Unity’s support article for macOS/iOS microphone permission states that if an app requests microphone permission without NSMicrophoneUsageDescription set, the app terminates with an error.
+- Unity’s macOS requirements documentation states that NSMicrophoneUsageDescription must be included in the macOS Info.plist for microphone access. (Source: Unity Vivox macOS requirements)
+- Unity’s support article for macOS/iOS microphone permission states that if an app requests microphone permission without NSMicrophoneUsageDescription set, the app terminates with an error. (Source: Unity Support)
 
 ### 2) System Audio Recording permission exists in macOS and is user-controlled
-- Apple Support documents a “Screen & System Audio Recording” privacy pane where users can allow screen and audio recording for an app, and explicitly notes that users can allow screen+audio or audio-only.
+- Apple Support documents a “Screen & System Audio Recording” privacy pane where users can allow screen and audio recording for an app, and explicitly notes that users can allow screen+audio or audio-only. (Source: Apple Support)
 
 ### 3) System audio capture via the CoreAudio process tap API uses NSAudioCaptureUsageDescription in practice
-- The AudioCap sample project (insidegui/AudioCap) explicitly states that NSAudioCaptureUsageDescription is used to define the system-audio capture permission prompt, and that there is no public API to request/check that permission.
+- The AudioCap sample project (insidegui/AudioCap) explicitly states that NSAudioCaptureUsageDescription is used to define the system-audio capture permission prompt, and that there is no public API to request/check that permission. (Source: AudioCap README)
 - This is a community sample, not official Apple documentation, but it is a direct, working reference for macOS 14.4+ system audio capture.
 
 ## Recommendations
 
 ### Immediate (Production Readiness)
 1) Serialize all CoreAudio listener setup/teardown in MicMonitor on a single queue.
-2) Add missing usage description keys to Info.plist:
-   - NSMicrophoneUsageDescription (microphone activity).
-   - NSAudioCaptureUsageDescription (system/app audio capture via process taps).
-3) Make isDucked reflect actual tap state (only true when at least one tap is active).
-4) Add output device change handling while ducking (recreate taps on default output device change).
+2) Make isDucked reflect actual tap state (only true when at least one tap is active).
+3) Add output device change handling while ducking (recreate taps on default output device change).
 
 ### Follow-up
-5) Validate tap audio format before scaling buffers; either convert or assert Float32.
-6) Optionally require at least one running input process before triggering when triggerAllApps is enabled.
+4) Validate tap audio format before scaling buffers; either convert or assert Float32.
+5) Optionally require at least one running input process before triggering when triggerAllApps is enabled.
 
 ## Sources
 - Apple Support: “Control access to screen and system audio recording on Mac”

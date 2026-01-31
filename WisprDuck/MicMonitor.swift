@@ -3,6 +3,7 @@ import Combine
 import AppKit
 
 final class MicMonitor: ObservableObject {
+    // Ensure NSMicrophoneUsageDescription is present if the app requests mic access.
     @Published private(set) var isMicActive: Bool = false
     @Published private(set) var shouldTriggerDuck: Bool = false
 
