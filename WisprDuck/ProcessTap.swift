@@ -1,5 +1,8 @@
 import Foundation
 import CoreAudio
+import os
+
+private let logger = Logger(subsystem: "com.wisprduck", category: "ProcessTap")
 
 /// Manages a single Core Audio process tap: intercepts one process's audio output,
 /// scales it by a duck factor, and plays it to the real output device.
@@ -58,7 +61,7 @@ final class ProcessTap {
         // 2. Create process tap
         var status = AudioHardwareCreateProcessTap(tapDesc, &tapID)
         guard status == noErr else {
-            print("ProcessTap: Failed to create tap for PID \(pid): \(status)")
+            logger.error("Failed to create tap for PID \(self.pid): \(status)")
             return false
         }
 
@@ -90,7 +93,7 @@ final class ProcessTap {
 
         status = AudioHardwareCreateAggregateDevice(aggDesc as CFDictionary, &aggregateDeviceID)
         guard status == noErr else {
-            print("ProcessTap: Failed to create aggregate device for PID \(pid): \(status)")
+            logger.error("Failed to create aggregate device for PID \(self.pid): \(status)")
             cleanupTap()
             return false
         }
@@ -103,7 +106,7 @@ final class ProcessTap {
             self.processAudioBuffers(input: inInputData, output: outOutputData)
         }
         guard status == noErr else {
-            print("ProcessTap: Failed to create IO proc for PID \(pid): \(status)")
+            logger.error("Failed to create IO proc for PID \(self.pid): \(status)")
             cleanupAggregateDevice()
             cleanupTap()
             return false
@@ -112,7 +115,7 @@ final class ProcessTap {
         // 6. Start the device
         status = AudioDeviceStart(aggregateDeviceID, ioProcID)
         guard status == noErr else {
-            print("ProcessTap: Failed to start device for PID \(pid): \(status)")
+            logger.error("Failed to start device for PID \(self.pid): \(status)")
             cleanupIOProc()
             cleanupAggregateDevice()
             cleanupTap()

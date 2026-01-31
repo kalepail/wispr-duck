@@ -1,5 +1,8 @@
 import CoreAudio
 import AppKit
+import os
+
+private let logger = Logger(subsystem: "com.wisprduck", category: "ProcessTapManager")
 
 /// Identifies an audio-producing process discovered via Core Audio.
 struct AudioProcess: Identifiable, Hashable {
@@ -188,7 +191,7 @@ final class ProcessTapManager {
         fadeOutTimer = nil
 
         guard let outputUID = getDefaultOutputDeviceUID() else {
-            print("ProcessTapManager: Could not get output device UID")
+            logger.error("Could not get output device UID")
             return false
         }
 
