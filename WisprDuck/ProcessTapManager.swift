@@ -135,9 +135,11 @@ final class ProcessTapManager {
 
     /// Returns deduplicated apps grouped by root app bundle ID.
     /// "Google Chrome Helper (Renderer)" groups under "Google Chrome".
-    /// Filters to regular apps only (those with a Dock icon), hiding system
-    /// services like PowerChime, callservicesd, loginwindow, etc.
-    func audioApps(from processes: [AudioProcess]) -> [AudioApp] {
+    ///
+    /// - Parameter includeAccessory: When true, includes menu-bar-only apps
+    ///   (e.g., Wispr Flow) alongside regular apps. When false, only apps with
+    ///   a Dock icon are returned. System daemons and XPC services are always excluded.
+    func audioApps(from processes: [AudioProcess], includeAccessory: Bool = false) -> [AudioApp] {
         var seen = Set<String>()
         var apps: [AudioApp] = []
 
@@ -147,12 +149,17 @@ final class ProcessTapManager {
             guard !seen.contains(rootBID) else { continue }
             seen.insert(rootBID)
 
-            // Only show regular apps (Dock icon / real UI) — filters out
-            // system daemons, XPC services, and menu-bar-only accessories.
             let rootApp = NSWorkspace.shared.runningApplications.first {
                 $0.bundleIdentifier == rootBID
             }
-            guard rootApp?.activationPolicy == .regular else { continue }
+            if includeAccessory {
+                // Include regular apps and menu-bar accessories, exclude background daemons
+                guard let policy = rootApp?.activationPolicy,
+                      policy == .regular || policy == .accessory else { continue }
+            } else {
+                // Only show regular apps (Dock icon / real UI)
+                guard rootApp?.activationPolicy == .regular else { continue }
+            }
 
             let name = rootApp?.localizedName ?? process.name
             apps.append(AudioApp(bundleID: rootBID, name: name))
@@ -229,16 +236,23 @@ final class ProcessTapManager {
 
     /// Smoothly restore audio by ramping volume back to 1.0 before destroying taps.
     /// Taps stay in activeTaps during the fade so duck() can cancel and reuse them.
-    /// Linear ramp from duck level to 1.0 takes up to 1s; timer gives 1.5s margin.
+    /// Timer fires just before the ramp completes so the tap destruction pop lands at 100%.
     func restoreAllWithFade() {
         isDucking = false
+
+        // Calculate how long the ramp will actually take based on current duck level.
+        // The linear ramp in ProcessTap sweeps 0→1 in 1s, so a partial sweep from
+        // currentDuckLevel→1.0 takes (1 - currentDuckLevel) * 1.0 seconds.
+        // Fire early so scheduling delay lands the tap destruction right at 100%.
+        let rampDuration: Double = 1.0
+        let estimatedFadeTime = Double(1.0 - currentDuckLevel) * rampDuration - 0.25
 
         // Ramp all taps toward full volume
         for (_, tap) in activeTaps {
             tap.updateDuckLevel(1.0)
         }
 
-        // Schedule tap destruction after the linear ramp completes.
+        // Schedule tap destruction just after the linear ramp completes.
         // If duck() is called before this fires, it cancels the timer and reuses the taps.
         let workItem = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
@@ -249,7 +263,7 @@ final class ProcessTapManager {
             self.fadeOutTimer = nil
         }
         fadeOutTimer = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: workItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + estimatedFadeTime, execute: workItem)
     }
 
     /// Update duck level for all active taps.

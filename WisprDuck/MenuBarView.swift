@@ -18,7 +18,6 @@ struct MenuBarView: View {
 
             Divider()
 
-            // Enable toggle
             Toggle("Enable Monitoring", isOn: $settings.isEnabled)
 
             Divider()
@@ -42,54 +41,38 @@ struct MenuBarView: View {
 
             Divider()
 
-            // Duck mode selection
-            VStack(alignment: .leading, spacing: 6) {
-                Toggle("Duck All Audio", isOn: $settings.duckAllAudio)
-                if settings.duckAllAudio {
-                    Text("Ducks every app producing audio — browsers, music, games, everything")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Text("Only selected apps below will be ducked")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+            // Trigger source
+            AppFilterSection(
+                title: "Trigger All Apps",
+                isAll: $settings.triggerAllApps,
+                allCaption: "Any mic use triggers ducking",
+                selectedLabel: "Triggering",
+                unselectedLabel: "Not triggering",
+                emptySelected: "No trigger apps selected yet",
+                emptyUnselected: "No apps using audio",
+                apps: duckController.triggerEligibleApps,
+                isEnabled: { settings.isTriggerBundleIDEnabled($0) },
+                toggle: { settings.toggleTriggerBundleID($0) }
+            )
 
             Divider()
 
-            // Audio apps list
-            Text("Audio Apps (\(duckController.audioApps.count))")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-
-            if duckController.audioApps.isEmpty {
-                Text("No apps are currently producing audio")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(duckController.audioApps) { app in
-                            AudioAppRow(
-                                app: app,
-                                settings: settings
-                            )
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(maxHeight: 200)
-                .opacity(settings.duckAllAudio ? 0.4 : 1.0)
-                .disabled(settings.duckAllAudio)
-            }
+            // Duck target
+            AppFilterSection(
+                title: "Duck All Apps",
+                isAll: $settings.duckAllAudio,
+                allCaption: "All audio apps are ducked",
+                selectedLabel: "Ducking",
+                unselectedLabel: "Not ducking",
+                emptySelected: "No duck targets selected yet",
+                emptyUnselected: "No apps playing audio",
+                apps: duckController.audioApps,
+                isEnabled: { settings.isBundleIDEnabled($0) },
+                toggle: { settings.toggleBundleID($0) }
+            )
 
             Divider()
 
-            // Quit
             Button("Quit WisprDuck") {
                 duckController.restoreAndStop()
                 NSApplication.shared.terminate(nil)
@@ -97,6 +80,7 @@ struct MenuBarView: View {
         }
         .padding(16)
         .frame(width: 280)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private var statusColor: Color {
@@ -113,16 +97,105 @@ struct MenuBarView: View {
     }
 }
 
-private struct AudioAppRow: View {
-    let app: AudioApp
-    @ObservedObject var settings: AppSettings
+// MARK: - Shared Components
+
+private struct AppFilterSection: View {
+    let title: String
+    @Binding var isAll: Bool
+    let allCaption: String
+    let selectedLabel: String
+    let unselectedLabel: String
+    let emptySelected: String
+    let emptyUnselected: String
+    let apps: [AudioApp]
+    let isEnabled: (String) -> Bool
+    let toggle: (String) -> Void
+
+    private var selected: [AudioApp] {
+        apps.filter { isEnabled($0.bundleID) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    private var unselected: [AudioApp] {
+        apps.filter { !isEnabled($0.bundleID) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
 
     var body: some View {
-        Toggle(isOn: Binding(
-            get: { settings.isBundleIDEnabled(app.bundleID) },
-            set: { _ in settings.toggleBundleID(app.bundleID) }
-        )) {
-            Text(app.name)
+        VStack(alignment: .leading, spacing: 8) {
+            Toggle(title, isOn: $isAll)
+            Text(allCaption)
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            if !isAll {
+                // Selected apps
+                AppSublist(
+                    label: selectedLabel,
+                    count: selected.count,
+                    apps: selected,
+                    emptyText: emptySelected,
+                    isEnabled: isEnabled,
+                    toggle: toggle
+                )
+
+                // Unselected apps
+                AppSublist(
+                    label: unselectedLabel,
+                    count: unselected.count,
+                    apps: unselected,
+                    emptyText: emptyUnselected,
+                    isEnabled: isEnabled,
+                    toggle: toggle
+                )
+            }
+        }
+    }
+}
+
+private struct AppSublist: View {
+    let label: String
+    let count: Int
+    let apps: [AudioApp]
+    let emptyText: String
+    let isEnabled: (String) -> Bool
+    let toggle: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Text(label)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text("(\(count))")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.top, 4)
+
+            if apps.isEmpty {
+                Text(emptyText)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, minHeight: 32, alignment: .center)
+                    .background(.quaternary.opacity(0.3))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(apps) { app in
+                            Toggle(isOn: Binding(
+                                get: { isEnabled(app.bundleID) },
+                                set: { _ in toggle(app.bundleID) }
+                            )) {
+                                Text(app.name)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 90)
+            }
         }
     }
 }

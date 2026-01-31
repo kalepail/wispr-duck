@@ -215,7 +215,7 @@ final class ProcessTap {
 
     /// Compute the linear ramp rate (max volume change per sample) for 1-second transitions.
     /// At 48kHz: rate = 1/48000 ≈ 0.00002. A full 0→1 sweep takes exactly 1s.
-    /// Partial sweeps are proportional (e.g., 0.2→1.0 takes 0.8s).
+    /// Partial sweeps are proportional (e.g., 0.1→1.0 takes 0.9s).
     private func computeRampRate(tapID: AudioObjectID) -> Float {
         var formatAddress = AudioObjectPropertyAddress(
             mSelector: kAudioTapPropertyFormat,
