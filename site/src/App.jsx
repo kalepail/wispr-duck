@@ -20,9 +20,14 @@ function DuckFootIcon({ className, decorative = false }) {
       role={decorative ? undefined : 'img'}
     >
       {!decorative && <title>WisprDuck logo</title>}
-      <path d="M 100,195 C 85,168 28,95 8,30 C 2,16 8,12 16,20 C 28,35 45,52 56,64 C 64,72 74,72 84,60 C 90,46 95,22 100,4 C 105,22 110,46 116,60 C 126,72 136,72 144,64 C 155,52 172,35 184,20 C 192,12 198,16 192,30 C 172,95 115,168 100,195 Z" fill="currentColor"/>
-      <path d="M 100,158 C 90,125 78,92 64,68" fill="none" stroke="white" strokeWidth="5" strokeLinecap="round" opacity="0.3"/>
-      <path d="M 100,158 C 110,125 122,92 136,68" fill="none" stroke="white" strokeWidth="5" strokeLinecap="round" opacity="0.3"/>
+      <defs>
+        <mask id="duck-foot-cutout">
+          <path d="M 100,195 C 85,168 28,95 8,30 C 2,16 8,12 16,20 C 28,35 45,52 56,64 C 64,72 74,72 84,60 C 90,46 95,22 100,4 C 105,22 110,46 116,60 C 126,72 136,72 144,64 C 155,52 172,35 184,20 C 192,12 198,16 192,30 C 172,95 115,168 100,195 Z" fill="white"/>
+          <path d="M 100,158 C 90,125 78,92 64,68" stroke="black" strokeWidth="5" strokeLinecap="round"/>
+          <path d="M 100,158 C 110,125 122,92 136,68" stroke="black" strokeWidth="5" strokeLinecap="round"/>
+        </mask>
+      </defs>
+      <path d="M 100,195 C 85,168 28,95 8,30 C 2,16 8,12 16,20 C 28,35 45,52 56,64 C 64,72 74,72 84,60 C 90,46 95,22 100,4 C 105,22 110,46 116,60 C 126,72 136,72 144,64 C 155,52 172,35 184,20 C 192,12 198,16 192,30 C 172,95 115,168 100,195 Z" fill="currentColor" mask="url(#duck-foot-cutout)"/>
     </svg>
   )
 }
