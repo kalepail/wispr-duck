@@ -1,6 +1,8 @@
 <p align="center">
-  <img src="docs/banner-dark.png" width="700" alt="WisprDuck — Shhh... Ducking volume.">
+  <img src="assets/banner-fun-2.png" width="700" alt="WisprDuck — Installing... 45% Complete">
 </p>
+
+<h1 align="center">Shhh... Ducking Volume</h1>
 
 <p align="center">
   <strong>Auto-duck background audio when your mic is active.</strong><br>
@@ -17,15 +19,16 @@
 
 ## What is WisprDuck?
 
-WisprDuck sits in your menu bar and watches for microphone activity. When any app starts using the mic — voice-to-text tools like [Wispr Flow](https://wispr.com), video calls, screen recordings — WisprDuck automatically lowers the volume of other apps so your voice comes through clearly. When the mic goes idle, volume smoothly fades back up.
+WisprDuck sits in your menu bar and watches for microphone activity. When a selected app starts using the mic — voice-to-text tools like [Wispr Flow](https://wispr.com), video calls, screen recordings — WisprDuck automatically lowers the volume of other apps so your voice comes through clearly. When the mic goes idle, volume smoothly fades back up.
 
 No manual toggling. No keyboard shortcuts. Just works.
 
 ## Features
 
-- **Automatic mic detection** — monitors the default input device, no setup required
+- **Per-app mic triggers** — choose which apps trigger ducking (e.g., only Wispr Flow) or duck on any mic use
+- **Per-app duck targets** — duck all audio or pick specific apps (Spotify, Chrome, Arc, etc.)
+- **Smart defaults** — Wispr Flow pre-selected as trigger, 20+ common audio apps pre-selected as duck targets
 - **Smooth linear fade** — 1-second constant-rate volume transitions, no harsh jumps
-- **Per-app control** — duck all audio or pick specific apps (Spotify, Chrome, Discord, etc.)
 - **Crash-safe** — uses `mutedWhenTapped` so audio auto-restores if WisprDuck quits unexpectedly
 - **Lightweight** — event-driven Core Audio listeners, no polling, minimal CPU usage
 - **Smart grouping** — Chrome helpers, Slack workers, etc. automatically group under their parent app
@@ -42,12 +45,13 @@ No manual toggling. No keyboard shortcuts. Just works.
 
 ## How It Works
 
-WisprDuck uses [Core Audio process taps](https://developer.apple.com/documentation/coreaudio) (macOS 14.2+) to intercept audio at the system level. When the mic goes active:
+WisprDuck uses [Core Audio process taps](https://developer.apple.com/documentation/coreaudio) (macOS 14.2+) to intercept audio at the system level. When a trigger app activates the mic:
 
-1. **Detect** — A Core Audio listener fires when any app activates the default input device
-2. **Tap** — Process taps are created for target apps, muting their original audio at the system mixer
-3. **Scale** — The intercepted audio is scaled by the duck level and played through an aggregate device
-4. **Restore** — When the mic goes idle, volume linearly ramps back to 100% over ~1 second, then taps are destroyed
+1. **Detect** — Per-process Core Audio listeners detect which app is using the mic input
+2. **Match** — The active mic app is checked against your trigger list (or triggers on any mic use)
+3. **Tap** — Process taps are created for target apps, muting their original audio at the system mixer
+4. **Scale** — The intercepted audio is scaled by the duck level and played through an aggregate device
+5. **Restore** — When the mic goes idle, volume linearly ramps back to 100% over ~1 second, then taps are destroyed
 
 The `mutedWhenTapped` behavior is the safety net: if WisprDuck crashes or is force-quit, macOS automatically unmutes all tapped processes. Audio is never permanently stuck at a low volume.
 
@@ -59,8 +63,10 @@ Click the duck foot icon in your menu bar:
 |---------|-------------|
 | **Enable Monitoring** | Toggle WisprDuck on/off |
 | **Duck Level** | How much to reduce volume (0–100%) |
-| **Duck All Audio** | Duck every app or only selected ones |
-| **Audio Apps** | Select specific apps to duck when not in "all" mode |
+| **Trigger All Apps** | Duck on any mic use, or only when selected apps use the mic |
+| **Trigger Apps** | Select which apps trigger ducking (e.g., Wispr Flow) |
+| **Duck All Apps** | Duck every app or only selected ones |
+| **Duck Targets** | Select specific apps to duck (Spotify, browsers, etc.) |
 
 ## Requirements
 
