@@ -1,0 +1,23 @@
+{
+	"name": "wisprduck",
+	"main": "./src/worker.js",
+	"compatibility_date": "2025-01-29",
+	"assets": {
+		"directory": "./dist",
+		"binding": "ASSETS"
+	},
+	"routes": [
+		{
+			"pattern": "*stellar.buzz/*",
+			"zone_name": "stellar.buzz"
+		},
+		{
+			"pattern": "wisprduck.com/*",
+			"zone_name": "stellar.buzz"
+		},
+		{
+			"pattern": "www.wisprduck.com/*",
+			"zone_name": "stellar.buzz"
+		}
+	]
+}
