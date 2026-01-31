@@ -9,12 +9,12 @@ final class MicMonitor: ObservableObject {
 
     /// When true, any app using the mic triggers ducking.
     var triggerAllApps: Bool = true {
-        didSet { reevaluateTriggerState() }
+        didSet { triggerSettingsDidChange() }
     }
 
     /// Bundle IDs that should trigger ducking when using the mic.
     var triggerBundleIDs: Set<String> = [] {
-        didSet { reevaluateTriggerState() }
+        didSet { triggerSettingsDidChange() }
     }
 
     /// Optional resolver to map helper bundle IDs to their root app bundle ID.
@@ -38,6 +38,10 @@ final class MicMonitor: ObservableObject {
         }
     }
 
+    // deinit calls performOnListenerQueue which may block via sync. This is safe
+    // because MicMonitor is owned by DuckController (a @StateObject released on
+    // the main thread, never on the listener queue). If ownership changes, audit
+    // for potential deadlock.
     deinit {
         performOnListenerQueue {
             removeDeviceListener()
@@ -243,6 +247,15 @@ final class MicMonitor: ObservableObject {
 
     // MARK: - Trigger Evaluation
 
+    /// Called from didSet of trigger settings (main thread). Dispatches to the
+    /// listener queue so CoreAudio reads (currentDeviceID, process state) are
+    /// serialized with listener callbacks that write the same state.
+    private func triggerSettingsDidChange() {
+        listenerQueue.async { [weak self] in
+            self?.reevaluateTriggerState()
+        }
+    }
+
     private func updateMicStatus() {
         let micActive = isDeviceRunningSomewhere()
         DispatchQueue.main.async {
@@ -254,10 +267,11 @@ final class MicMonitor: ObservableObject {
     /// Central re-evaluation: checks which processes are using the mic input
     /// and whether any of them match the trigger app list.
     ///
-    /// Called from listener callbacks on `listenerQueue`. Reads CoreAudio state
-    /// on the calling thread (fast, thread-safe), then dispatches to main to
-    /// read configuration and publish the result.
-    func reevaluateTriggerState(micActive: Bool? = nil) {
+    /// Always called on `listenerQueue` — either directly from CoreAudio listener
+    /// callbacks or dispatched from `triggerSettingsDidChange()`. Reads CoreAudio
+    /// state on the listener queue, then dispatches to main to read configuration
+    /// and publish the result.
+    private func reevaluateTriggerState(micActive: Bool? = nil) {
         // Read CoreAudio state on the current (listener) queue — these are fast, thread-safe reads
         let deviceActive = micActive ?? isDeviceRunningSomewhere()
 
