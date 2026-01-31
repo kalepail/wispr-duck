@@ -18,6 +18,7 @@ final class ProcessTap {
     private let aggregateUUID = UUID()
     private let ioQueue = DispatchQueue(label: "com.wisprduck.processtap.io", qos: .userInitiated)
     private var isRunning = false
+    private var tapFormatIsFloat32 = true
 
     // Lock-free volume communication between main thread and audio IO queue.
     // Float is atomic-width (32-bit) on ARM64/x86_64 — no torn reads possible.
@@ -162,6 +163,21 @@ final class ProcessTap {
         // Tap buffers are at the END of the input list, after the output device's own inputs.
         let tapOffset = max(0, inputs.count - outputs.count)
 
+        guard tapFormatIsFloat32 else {
+            // Pass-through without scaling if the format is not Float32 PCM.
+            for (i, output) in outputs.enumerated() {
+                let inputIndex = tapOffset + i
+                guard inputIndex < inputs.count,
+                      let inData = inputs[inputIndex].mData,
+                      let outData = output.mData else {
+                    continue
+                }
+                let bytes = min(Int(inputs[inputIndex].mDataByteSize), Int(output.mDataByteSize))
+                memcpy(outData, inData, bytes)
+            }
+            return
+        }
+
         let target = _targetLevel
         var current = _currentLevel
         let rate = _rampRate
@@ -225,6 +241,10 @@ final class ProcessTap {
         var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
 
         let status = AudioObjectGetPropertyData(tapID, &formatAddress, 0, nil, &size, &format)
+        tapFormatIsFloat32 = status == noErr
+            && format.mFormatID == kAudioFormatLinearPCM
+            && (format.mFormatFlags & kAudioFormatFlagIsFloat) != 0
+            && format.mBitsPerChannel == 32
         let sampleRate: Float = (status == noErr && format.mSampleRate > 0)
             ? Float(format.mSampleRate)
             : 44100.0 // Fallback

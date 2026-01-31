@@ -95,12 +95,11 @@ final class DuckController: ObservableObject {
         let selectedBundleIDs = settings.enabledBundleIDs
         let duckAll = settings.duckAllApps
 
-        tapManager.duck(
+        isDucked = tapManager.duck(
             bundleIDs: selectedBundleIDs,
             duckAll: duckAll,
             duckLevel: duckLevel
         )
-        isDucked = true
     }
 
     private func restore() {

@@ -24,24 +24,29 @@ The application architecture is consistent with the process-tap approach describ
 1) MicMonitor listener state is mutated on multiple threads (main + CoreAudio listener queue) without synchronization.
    - Risk: data races in listener blocks and per-process listener map, potentially leading to crashes or missing listeners.
    - Affected code: MicMonitor.swift
+   - Status: fixed by serializing listener setup/teardown on the listener queue.
 
 ### High
 2) “Ducked” UI state can be true even when no taps are active.
    - If ducking is enabled but there are zero eligible targets, duck() still flips isDucked to true.
    - Affected code: DuckController.swift, ProcessTapManager.swift
+   - Status: fixed by making duck() return whether taps exist and updating isDucked accordingly.
 
 3) Output device changes during an active duck session are not handled.
    - Taps are created with the output device UID at duck time; switching outputs can break routing or silence audio.
    - Affected code: ProcessTapManager.swift
+   - Status: fixed by monitoring default output changes and rebuilding taps.
 
 ### Medium
-5) Audio buffer format assumptions in ProcessTap.
+4) Audio buffer format assumptions in ProcessTap.
    - processAudioBuffers assumes Float32 and directly multiplies samples; if the tap format differs, behavior is undefined.
    - Affected code: ProcessTap.swift
+   - Status: mitigated by detecting non-Float32 formats and falling back to pass-through.
 
-6) Trigger-all behavior relies only on device-level mic running state.
+5) Trigger-all behavior relies only on device-level mic running state.
    - Some drivers report “running” without a process actively using input; could over-trigger ducking.
    - Affected code: MicMonitor.swift
+   - Status: fixed by requiring at least one running input process before ducking.
 
 ## Permissions Findings (Fact-Checked)
 
@@ -59,13 +64,7 @@ The application architecture is consistent with the process-tap approach describ
 ## Recommendations
 
 ### Immediate (Production Readiness)
-1) Serialize all CoreAudio listener setup/teardown in MicMonitor on a single queue.
-2) Make isDucked reflect actual tap state (only true when at least one tap is active).
-3) Add output device change handling while ducking (recreate taps on default output device change).
-
-### Follow-up
-4) Validate tap audio format before scaling buffers; either convert or assert Float32.
-5) Optionally require at least one running input process before triggering when triggerAllApps is enabled.
+1) Consider adding a conversion path for non-Float32 formats if pass-through is undesirable.
 
 ## Sources
 - Apple Support: “Control access to screen and system audio recording on Mac”

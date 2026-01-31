@@ -26,19 +26,33 @@ final class MicMonitor: ObservableObject {
     private var processListListenerBlock: AudioObjectPropertyListenerBlock?
     private var perProcessListenerBlocks: [AudioObjectID: AudioObjectPropertyListenerBlock] = [:]
     private let listenerQueue = DispatchQueue(label: "com.wisprduck.micmonitor", qos: .userInitiated)
+    private let listenerQueueKey = DispatchSpecificKey<Void>()
 
     init() {
-        setupDefaultDeviceListener()
-        setupProcessListListener()
-        bindToCurrentInputDevice()
-        refreshPerProcessListeners()
+        listenerQueue.setSpecific(key: listenerQueueKey, value: ())
+        performOnListenerQueue {
+            setupDefaultDeviceListener()
+            setupProcessListListener()
+            bindToCurrentInputDevice()
+            refreshPerProcessListeners()
+        }
     }
 
     deinit {
-        removeDeviceListener()
-        removeDefaultDeviceListener()
-        removeProcessListListener()
-        removeAllPerProcessListeners()
+        performOnListenerQueue {
+            removeDeviceListener()
+            removeDefaultDeviceListener()
+            removeProcessListListener()
+            removeAllPerProcessListeners()
+        }
+    }
+
+    private func performOnListenerQueue(_ work: () -> Void) {
+        if DispatchQueue.getSpecific(key: listenerQueueKey) != nil {
+            work()
+        } else {
+            listenerQueue.sync(execute: work)
+        }
     }
 
     // MARK: - Default Input Device Change Monitoring
@@ -273,7 +287,7 @@ final class MicMonitor: ObservableObject {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             if self.triggerAllApps {
-                self.shouldTriggerDuck = true
+                self.shouldTriggerDuck = !inputBundleIDs.isEmpty
                 return
             }
             let resolver = self.rootBundleIDResolver

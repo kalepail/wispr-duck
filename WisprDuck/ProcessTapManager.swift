@@ -39,6 +39,7 @@ final class ProcessTapManager {
     private var duckAllMode = false
     private var fadeOutTimer: DispatchWorkItem?
     private var onProcessListChanged: (([AudioProcess]) -> Void)?
+    private var outputDeviceListenerBlock: AudioObjectPropertyListenerBlock?
 
     /// Cache for bundle ID → root app bundle ID resolution.
     /// Avoids repeated NSWorkspace lookups for the same helper bundle IDs.
@@ -180,20 +181,22 @@ final class ProcessTapManager {
     /// Duck audio for processes matching the given bundle IDs.
     /// If bundleIDs is empty and duckAll is true, ducks all audio processes.
     /// If called during a fade-out, cancels the fade and reuses existing taps.
-    func duck(bundleIDs: Set<String>, duckAll: Bool, duckLevel: Float) {
+    @discardableResult
+    func duck(bundleIDs: Set<String>, duckAll: Bool, duckLevel: Float) -> Bool {
         // Cancel any pending fade-out destruction
         fadeOutTimer?.cancel()
         fadeOutTimer = nil
 
         guard let outputUID = getDefaultOutputDeviceUID() else {
             print("ProcessTapManager: Could not get output device UID")
-            return
+            return false
         }
 
         isDucking = true
         currentDuckLevel = duckLevel
         currentBundleIDs = bundleIDs
         duckAllMode = duckAll
+        startOutputDeviceMonitoring()
 
         // Update existing taps (e.g. re-ducking after a cancelled fade-out)
         for tap in activeTaps.values {
@@ -217,6 +220,8 @@ final class ProcessTapManager {
                 activeTaps[process.pid] = tap
             }
         }
+
+        return !activeTaps.isEmpty
     }
 
     /// Restore all ducked processes immediately. Used for app quit where
@@ -230,6 +235,7 @@ final class ProcessTapManager {
             tap.stop()
         }
         activeTaps.removeAll()
+        stopOutputDeviceMonitoring()
     }
 
     /// Smoothly restore audio by ramping volume back to 1.0 before destroying taps.
@@ -259,6 +265,7 @@ final class ProcessTapManager {
             }
             self.activeTaps.removeAll()
             self.fadeOutTimer = nil
+            self.stopOutputDeviceMonitoring()
         }
         fadeOutTimer = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + estimatedFadeTime, execute: workItem)
@@ -315,6 +322,55 @@ final class ProcessTapManager {
             block
         )
         processListListenerBlock = nil
+    }
+
+    // MARK: - Output Device Monitoring
+
+    private func startOutputDeviceMonitoring() {
+        guard outputDeviceListenerBlock == nil else { return }
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        outputDeviceListenerBlock = { [weak self] _, _ in
+            DispatchQueue.main.async {
+                self?.handleOutputDeviceChanged()
+            }
+        }
+
+        AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            listenerQueue,
+            outputDeviceListenerBlock!
+        )
+    }
+
+    private func stopOutputDeviceMonitoring() {
+        guard let block = outputDeviceListenerBlock else { return }
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        AudioObjectRemovePropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            listenerQueue,
+            block
+        )
+        outputDeviceListenerBlock = nil
+    }
+
+    private func handleOutputDeviceChanged() {
+        guard isDucking else { return }
+        let bundleIDs = currentBundleIDs
+        let duckAll = duckAllMode
+        let level = currentDuckLevel
+        restoreAll()
+        _ = duck(bundleIDs: bundleIDs, duckAll: duckAll, duckLevel: level)
     }
 
     private func handleProcessListChanged() {
@@ -393,6 +449,7 @@ final class ProcessTapManager {
 
     deinit {
         stopProcessListMonitoring()
+        stopOutputDeviceMonitoring()
         restoreAll()
     }
 }

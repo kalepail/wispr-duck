@@ -113,6 +113,7 @@ References:
 - The tap captures audio BEFORE it reaches the output device, so you have full control
 - Setting `muteBehavior = .muted` silences the original; your callback plays the modified audio
 - For ducking (not muting), scale samples by `duckLevel / 100.0`
+- Validate the tap format (e.g., Float32 PCM) before scaling samples; provide a safe fallback for unsupported formats.
 
 ---
 
