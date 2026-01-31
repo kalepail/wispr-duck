@@ -35,8 +35,8 @@ No manual toggling. No keyboard shortcuts. Just works.
 
 ## Installation
 
-1. Download **WisprDuck.zip** from the [latest release](../../releases/latest)
-2. Unzip and drag **WisprDuck.app** to `/Applications`
+1. Clone the repo and [build from source](#building-from-source), or download a build from the [releases page](../../releases/latest)
+2. Drag **WisprDuck.app** to `/Applications`
 3. Launch WisprDuck
 4. On first launch: right-click the app → **Open** (required for unsigned apps)
 5. Grant **microphone access** when prompted
@@ -62,11 +62,9 @@ Click the duck foot icon in your menu bar:
 | Setting | Description |
 |---------|-------------|
 | **Enable Monitoring** | Toggle WisprDuck on/off |
-| **Duck Level** | How much to reduce volume (0–100%) |
-| **Trigger All Apps** | Duck on any mic use, or only when selected apps use the mic |
-| **Trigger Apps** | Select which apps trigger ducking (e.g., Wispr Flow) |
-| **Duck All Apps** | Duck every app or only selected ones |
-| **Duck Targets** | Select specific apps to duck (Spotify, browsers, etc.) |
+| **Duck Level** | Target volume when ducked — 0% is silent, 100% is full volume (default 10%) |
+| **Trigger All Apps** | Duck on any mic use, or toggle off to pick specific trigger apps |
+| **Duck All Apps** | Duck every audio app, or toggle off to pick specific apps to duck |
 
 ## Requirements
 
