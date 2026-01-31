@@ -48,8 +48,9 @@ final class ProcessTap {
     func start(outputDeviceUID: String, duckLevel: Float) -> Bool {
         guard !isRunning else { return true }
 
-        _targetLevel = duckLevel
-        _currentLevel = duckLevel // Start at duck level — no ramp on duck-in to avoid silence→pop
+        let clampedLevel = max(0.0, min(1.0, duckLevel))
+        _targetLevel = clampedLevel
+        _currentLevel = clampedLevel // Start at duck level — no ramp on duck-in to avoid silence→pop
 
         // 1. Create tap description
         let tapDesc = CATapDescription(stereoMixdownOfProcesses: [processObjectID])
