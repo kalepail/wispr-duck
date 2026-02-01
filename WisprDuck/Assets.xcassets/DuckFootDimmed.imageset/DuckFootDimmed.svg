@@ -1,6 +1,6 @@
 <svg width="18" height="18" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <mask id="foot-cutout">
+    <mask id="foot-cutout-dimmed">
       <path d="
         M 100,195
         C 85,168 28,95 8,30
@@ -35,5 +35,6 @@
     C 172,95 115,168 100,195
     Z"
     fill="black"
-    mask="url(#foot-cutout)"/>
+    fill-opacity="0.3"
+    mask="url(#foot-cutout-dimmed)"/>
 </svg>

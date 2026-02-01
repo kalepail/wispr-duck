@@ -2,13 +2,13 @@ import SwiftUI
 
 @main
 struct WisprDuckApp: App {
-    @StateObject private var settings: AppSettings
+    @State private var settings: AppSettings
     @StateObject private var duckController: DuckController
     @Environment(\.openWindow) private var openWindow
 
     init() {
         let s = AppSettings()
-        _settings = StateObject(wrappedValue: s)
+        _settings = State(wrappedValue: s)
         _duckController = StateObject(wrappedValue: DuckController(settings: s))
     }
 
@@ -16,8 +16,8 @@ struct WisprDuckApp: App {
         MenuBarExtra {
             MenuBarView(settings: settings, duckController: duckController)
         } label: {
-            Image("DuckFoot")
-                .opacity(settings.isEnabled ? 1.0 : 0.5)
+            Image(settings.isEnabled ? "DuckFoot" : "DuckFootDimmed")
+                .id(settings.isEnabled)
                 .task {
                     if !settings.hasCompletedOnboarding {
                         NSApp.setActivationPolicy(.regular)

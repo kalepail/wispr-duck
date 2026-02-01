@@ -3,12 +3,26 @@ import SwiftUI
 private let duckBundleIDsKey = "duckBundleIDs3"
 private let triggerBundleIDsKey = "triggerBundleIDs3"
 
-final class AppSettings: ObservableObject {
-    @AppStorage("isEnabled") var isEnabled: Bool = true
-    @AppStorage("duckLevel") var duckLevel: Int = 10
-    @AppStorage("duckAllApps") var duckAllApps: Bool = false
-    @AppStorage("triggerAllApps2") var triggerAllApps: Bool = false
-    @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding: Bool = false
+@Observable
+final class AppSettings {
+    /// Called whenever a setting changes, so non-SwiftUI observers (e.g. DuckController) can react.
+    var onSettingsChanged: (() -> Void)?
+
+    var isEnabled: Bool = UserDefaults.standard.object(forKey: "isEnabled") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(isEnabled, forKey: "isEnabled"); onSettingsChanged?() }
+    }
+    var duckLevel: Int = UserDefaults.standard.object(forKey: "duckLevel") as? Int ?? 10 {
+        didSet { UserDefaults.standard.set(duckLevel, forKey: "duckLevel"); onSettingsChanged?() }
+    }
+    var duckAllApps: Bool = UserDefaults.standard.object(forKey: "duckAllApps") as? Bool ?? false {
+        didSet { UserDefaults.standard.set(duckAllApps, forKey: "duckAllApps"); onSettingsChanged?() }
+    }
+    var triggerAllApps: Bool = UserDefaults.standard.object(forKey: "triggerAllApps2") as? Bool ?? false {
+        didSet { UserDefaults.standard.set(triggerAllApps, forKey: "triggerAllApps2"); onSettingsChanged?() }
+    }
+    var hasCompletedOnboarding: Bool = UserDefaults.standard.object(forKey: "hasCompletedOnboarding") as? Bool ?? false {
+        didSet { UserDefaults.standard.set(hasCompletedOnboarding, forKey: "hasCompletedOnboarding") }
+    }
 
     // MARK: - Default Selections
 
@@ -76,7 +90,7 @@ final class AppSettings: ObservableObject {
         var ids = enabledBundleIDs
         if ids.contains(bundleID) { ids.remove(bundleID) } else { ids.insert(bundleID) }
         enabledBundleIDs = ids
-        objectWillChange.send()
+        onSettingsChanged?()
     }
 
     // MARK: - Trigger Bundle IDs
@@ -94,7 +108,7 @@ final class AppSettings: ObservableObject {
         var ids = triggerBundleIDs
         if ids.contains(bundleID) { ids.remove(bundleID) } else { ids.insert(bundleID) }
         triggerBundleIDs = ids
-        objectWillChange.send()
+        onSettingsChanged?()
     }
 
     // MARK: - Helpers

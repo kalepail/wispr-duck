@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct MenuBarView: View {
-    @ObservedObject var settings: AppSettings
+    @Bindable var settings: AppSettings
     @ObservedObject var duckController: DuckController
 
     var body: some View {
@@ -96,15 +96,14 @@ struct MenuBarView: View {
     }
 
     private var statusColor: Color {
-        if !settings.isEnabled { return .gray }
-        if duckController.isDucked { return .orange }
-        return .mallardGreen
+        if !settings.isEnabled { return .secondary }
+        if duckController.isDucked { return .yellow }
+        return .statusGreen
     }
 
     private var statusText: String {
         if !settings.isEnabled { return "Disabled" }
         if duckController.isDucked { return "Ducked" }
-        if duckController.micMonitor.isMicActive { return "Mic Active" }
         return "Monitoring"
     }
 }
@@ -113,6 +112,7 @@ struct MenuBarView: View {
 
 extension Color {
     static let mallardGreen = Color(red: 0.075, green: 0.42, blue: 0.227)
+    static let statusGreen = Color(red: 0.2, green: 0.84, blue: 0.4)
 }
 
 // MARK: - Bundle Extension

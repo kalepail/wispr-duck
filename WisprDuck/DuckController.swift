@@ -55,16 +55,15 @@ final class DuckController: ObservableObject {
 
         // React to settings changes — restore if disabled while ducked,
         // and sync trigger settings to MicMonitor
-        settings.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
+        settings.onSettingsChanged = { [weak self] in
+            DispatchQueue.main.async {
                 guard let self else { return }
                 if !self.settings.isEnabled && self.isDucked {
                     self.restore()
                 }
                 self.syncTriggerSettings()
             }
-            .store(in: &cancellables)
+        }
     }
 
     // MARK: - Settings Sync

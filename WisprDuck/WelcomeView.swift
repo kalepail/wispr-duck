@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct WelcomeView: View {
-    @ObservedObject var settings: AppSettings
+    @Bindable var settings: AppSettings
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
