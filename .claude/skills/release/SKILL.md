@@ -15,7 +15,14 @@ Build a signed, notarized, and stapled `.app`, then publish it as a GitHub relea
 ## Pre-flight
 
 1. Confirm the working tree is clean (`git status`). Abort if there are uncommitted changes.
-2. Confirm the version `$ARGUMENTS` does not already have a git tag or GitHub release.
+2. Check whether `$ARGUMENTS` already has a git tag or GitHub release.
+   - If it **does not exist**, proceed normally.
+   - If it **already exists** and the user explicitly asked to overwrite/re-release, run the re-release cleanup before continuing:
+     ```bash
+     gh release delete v$ARGUMENTS --repo kalepail/wispr-duck --yes --cleanup-tag
+     git tag -d v$ARGUMENTS 2>/dev/null || true
+     ```
+   - If it already exists and the user did **not** ask to overwrite, abort and ask for confirmation.
 3. If not on `main`, merge the current branch into `main` and switch to it:
    ```
    git checkout main
@@ -131,10 +138,49 @@ rm /tmp/WisprDuck-$ARGUMENTS.zip
 ditto -c -k --keepParent /tmp/WisprDuckExport/WisprDuck.app /tmp/WisprDuck-$ARGUMENTS.zip
 ```
 
-## Step 8 — Create GitHub release
+## Step 8 — Draft release notes and create GitHub release
+
+**Do not use `--generate-notes`** — it only produces a bare changelog link with no useful content.
+
+Instead, draft proper release notes:
+
+1. Run `git log <previous-tag>..HEAD --oneline` to review all commits since the last release.
+2. Read the previous release's notes (`gh release view <previous-tag> --repo kalepail/wispr-duck`) to match the established tone and format.
+3. Write a release body. **Scale the detail to the release size:**
+
+**Patch releases (x.y.Z)** — just categorized bullets, no intro paragraph:
+
+```markdown
+### <Category>
+
+- **Bold summary** — detail of each meaningful change.
+
+**Full Changelog**: https://github.com/kalepail/wispr-duck/compare/<previous-tag>...v$ARGUMENTS
+```
+
+**Minor/major releases (x.Y.0 / X.0.0)** — intro paragraph + categorized bullets:
+
+```markdown
+## What's New in v$ARGUMENTS
+
+<1-2 sentence summary of the theme of this release.>
+
+### <Category> (e.g. Bug Fixes, UI, Audio, Internal)
+
+- **Bold summary** — detail of each meaningful change.
+
+**Full Changelog**: https://github.com/kalepail/wispr-duck/compare/<previous-tag>...v$ARGUMENTS
+```
+
+**Do not repeat boilerplate every release.** Installation instructions, system requirements, and signing info belong in the README and on wisprduck.com — not in release notes. Only mention these if something about them *changes* (e.g., certificate rotation, new OS requirement, changed install steps).
+
+4. Create the release, passing the body via a HEREDOC:
 
 ```bash
-gh release create v$ARGUMENTS /tmp/WisprDuck-$ARGUMENTS.zip --repo kalepail/wispr-duck --title "WisprDuck v$ARGUMENTS" --generate-notes
+gh release create v$ARGUMENTS /tmp/WisprDuck-$ARGUMENTS.zip --repo kalepail/wispr-duck --title "WisprDuck v$ARGUMENTS" --notes "$(cat <<'EOF'
+<drafted release notes here>
+EOF
+)"
 ```
 
 Print the release URL when done.
