@@ -13,6 +13,7 @@ private let logger = Logger(subsystem: "com.wisprduck", category: "ProcessTap")
 final class ProcessTap {
     let processObjectID: AudioObjectID
     let pid: pid_t
+    private(set) var lastError: String?
 
     private var tapID: AudioObjectID = kAudioObjectUnknown
     private var aggregateDeviceID: AudioObjectID = kAudioObjectUnknown
@@ -23,12 +24,9 @@ final class ProcessTap {
     private var isRunning = false
     private var tapFormatIsFloat32 = true
 
-    // Lock-free volume communication between main thread and audio IO queue.
-    // Float is atomic-width (32-bit) on ARM64/x86_64 — no torn reads possible.
-    // nonisolated(unsafe) opts out of Swift concurrency checks for cross-isolation access.
-    nonisolated(unsafe) private var _targetLevel: Float = 1.0
-    nonisolated(unsafe) private var _currentLevel: Float = 1.0
-    nonisolated(unsafe) private var _rampRate: Float = 0.0 // Max change per sample (linear ramp)
+    private var targetLevel: Float = 1.0
+    private var currentLevel: Float = 1.0
+    private var rampRate: Float = 0.0 // Max change per sample (linear ramp)
 
     init(processObjectID: AudioObjectID, pid: pid_t) {
         self.processObjectID = processObjectID
@@ -47,10 +45,11 @@ final class ProcessTap {
     ///   - duckLevel: Volume factor 0.0–1.0 (e.g., 0.2 for 20%)
     func start(outputDeviceUID: String, duckLevel: Float) -> Bool {
         guard !isRunning else { return true }
+        lastError = nil
 
         let clampedLevel = max(0.0, min(1.0, duckLevel))
-        _targetLevel = clampedLevel
-        _currentLevel = clampedLevel // Start at duck level — no ramp on duck-in to avoid silence→pop
+        targetLevel = clampedLevel
+        currentLevel = clampedLevel // Start at duck level — no ramp on duck-in to avoid silence→pop
 
         // 1. Create tap description
         let tapDesc = CATapDescription(stereoMixdownOfProcesses: [processObjectID])
@@ -62,12 +61,14 @@ final class ProcessTap {
         // 2. Create process tap
         var status = AudioHardwareCreateProcessTap(tapDesc, &tapID)
         guard status == noErr else {
-            logger.error("Failed to create tap for PID \(self.pid): \(status)")
+            let message = "Could not create system audio tap for PID \(pid): \(describeOSStatus(status))"
+            lastError = message
+            logger.error("\(message)")
             return false
         }
 
         // 3. Compute linear ramp rate from tap's sample rate
-        _rampRate = computeRampRate(tapID: tapID)
+        rampRate = computeRampRate(tapID: tapID)
 
         // 4. Create aggregate device combining real output + tap
         let aggDesc: [String: Any] = [
@@ -94,7 +95,9 @@ final class ProcessTap {
 
         status = AudioHardwareCreateAggregateDevice(aggDesc as CFDictionary, &aggregateDeviceID)
         guard status == noErr else {
-            logger.error("Failed to create aggregate device for PID \(self.pid): \(status)")
+            let message = "Could not create aggregate audio device for PID \(pid): \(describeOSStatus(status))"
+            lastError = message
+            logger.error("\(message)")
             cleanupTap()
             return false
         }
@@ -107,7 +110,9 @@ final class ProcessTap {
             self.processAudioBuffers(input: inInputData, output: outOutputData)
         }
         guard status == noErr else {
-            logger.error("Failed to create IO proc for PID \(self.pid): \(status)")
+            let message = "Could not create audio IO callback for PID \(pid): \(describeOSStatus(status))"
+            lastError = message
+            logger.error("\(message)")
             cleanupAggregateDevice()
             cleanupTap()
             return false
@@ -116,7 +121,9 @@ final class ProcessTap {
         // 6. Start the device
         status = AudioDeviceStart(aggregateDeviceID, ioProcID)
         guard status == noErr else {
-            logger.error("Failed to start device for PID \(self.pid): \(status)")
+            let message = "Could not start aggregate audio device for PID \(pid): \(describeOSStatus(status))"
+            lastError = message
+            logger.error("\(message)")
             cleanupIOProc()
             cleanupAggregateDevice()
             cleanupTap()
@@ -135,16 +142,22 @@ final class ProcessTap {
 
         // Strict cleanup order: Stop → DestroyIOProc → DestroyAggregate → DestroyTap
         if let procID = ioProcID {
-            AudioDeviceStop(aggregateDeviceID, procID)
+            let status = AudioDeviceStop(aggregateDeviceID, procID)
+            if status != noErr {
+                logger.error("Could not stop aggregate audio device for PID \(self.pid): \(describeOSStatus(status))")
+            }
         }
         cleanupIOProc()
         cleanupAggregateDevice()
         cleanupTap()
     }
 
-    /// Update the duck level while the tap is running. Thread-safe (lock-free).
+    /// Update the duck level while the tap is running.
     func updateDuckLevel(_ level: Float) {
-        _targetLevel = max(0.0, min(1.0, level))
+        let clampedLevel = max(0.0, min(1.0, level))
+        ioQueue.async { [weak self] in
+            self?.targetLevel = clampedLevel
+        }
     }
 
     // MARK: - Audio Processing
@@ -174,6 +187,9 @@ final class ProcessTap {
                 guard inputIndex < inputs.count,
                       let inData = inputs[inputIndex].mData,
                       let outData = output.mData else {
+                    if let outData = output.mData {
+                        memset(outData, 0, Int(output.mDataByteSize))
+                    }
                     continue
                 }
                 let bytes = min(Int(inputs[inputIndex].mDataByteSize), Int(output.mDataByteSize))
@@ -182,21 +198,25 @@ final class ProcessTap {
             return
         }
 
-        let target = _targetLevel
-        var current = _currentLevel
-        let rate = _rampRate
+        let target = targetLevel
+        var current = currentLevel
+        let rate = rampRate
 
         for (i, output) in outputs.enumerated() {
             let inputIndex = tapOffset + i
             guard inputIndex < inputs.count,
                   let inData = inputs[inputIndex].mData,
                   let outData = output.mData else {
+                if let outData = output.mData {
+                    memset(outData, 0, Int(output.mDataByteSize))
+                }
                 continue
             }
 
             let inSamples = inData.assumingMemoryBound(to: Float.self)
             let outSamples = outData.assumingMemoryBound(to: Float.self)
-            let sampleCount = Int(output.mDataByteSize) / MemoryLayout<Float>.size
+            let byteCount = min(Int(inputs[inputIndex].mDataByteSize), Int(output.mDataByteSize))
+            let sampleCount = byteCount / MemoryLayout<Float>.size
 
             for j in 0..<sampleCount {
                 // Linear ramp: move toward target at a fixed rate per sample.
@@ -207,26 +227,35 @@ final class ProcessTap {
             }
         }
 
-        _currentLevel = current
+        currentLevel = current
     }
 
     // MARK: - Cleanup Helpers
 
     private func cleanupIOProc() {
         guard let procID = ioProcID else { return }
-        AudioDeviceDestroyIOProcID(aggregateDeviceID, procID)
+        let status = AudioDeviceDestroyIOProcID(aggregateDeviceID, procID)
+        if status != noErr {
+            logger.error("Could not destroy audio IO callback for PID \(self.pid): \(describeOSStatus(status))")
+        }
         ioProcID = nil
     }
 
     private func cleanupAggregateDevice() {
         guard aggregateDeviceID != kAudioObjectUnknown else { return }
-        AudioHardwareDestroyAggregateDevice(aggregateDeviceID)
+        let status = AudioHardwareDestroyAggregateDevice(aggregateDeviceID)
+        if status != noErr {
+            logger.error("Could not destroy aggregate audio device for PID \(self.pid): \(describeOSStatus(status))")
+        }
         aggregateDeviceID = kAudioObjectUnknown
     }
 
     private func cleanupTap() {
         guard tapID != kAudioObjectUnknown else { return }
-        AudioHardwareDestroyProcessTap(tapID)
+        let status = AudioHardwareDestroyProcessTap(tapID)
+        if status != noErr {
+            logger.error("Could not destroy process tap for PID \(self.pid): \(describeOSStatus(status))")
+        }
         tapID = kAudioObjectUnknown
     }
 

@@ -20,6 +20,28 @@ struct MenuBarView: View {
 
             Toggle("Enable Monitoring", isOn: $settings.isEnabled)
 
+            if let issueMessage = duckController.currentIssueMessage {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(issueMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    HStack {
+                        Button("Microphone") {
+                            NSWorkspace.shared.open(microphonePrivacySettingsURL)
+                        }
+                        .footerButtonStyle()
+                        Button("System Audio") {
+                            NSWorkspace.shared.open(privacySettingsURL)
+                        }
+                        .footerButtonStyle()
+                    }
+                }
+                .padding(8)
+                .background(.yellow.opacity(0.16), in: RoundedRectangle(cornerRadius: 6))
+            }
+
             Divider()
 
             // Duck level slider
@@ -52,7 +74,7 @@ struct MenuBarView: View {
                 emptyUnselected: "No apps using audio",
                 apps: duckController.triggerEligibleApps,
                 isEnabled: { settings.isTriggerBundleIDEnabled($0) },
-                toggle: { settings.toggleTriggerBundleID($0) }
+                setEnabled: { settings.setTriggerBundleID($0, enabled: $1) }
             )
 
             Divider()
@@ -68,7 +90,7 @@ struct MenuBarView: View {
                 emptyUnselected: "No apps playing audio",
                 apps: duckController.audioApps,
                 isEnabled: { settings.isBundleIDEnabled($0) },
-                toggle: { settings.toggleBundleID($0) }
+                setEnabled: { settings.setBundleID($0, enabled: $1) }
             )
 
             Divider()
@@ -149,7 +171,7 @@ private struct AppFilterSection: View {
     let emptyUnselected: String
     let apps: [AudioApp]
     let isEnabled: (String) -> Bool
-    let toggle: (String) -> Void
+    let setEnabled: (String, Bool) -> Void
 
     private var selected: [AudioApp] {
         apps.filter { isEnabled($0.bundleID) }
@@ -175,7 +197,7 @@ private struct AppFilterSection: View {
                     apps: selected,
                     emptyText: emptySelected,
                     isEnabled: isEnabled,
-                    toggle: toggle
+                    setEnabled: setEnabled
                 )
 
                 // Unselected apps
@@ -184,7 +206,7 @@ private struct AppFilterSection: View {
                     apps: unselected,
                     emptyText: emptyUnselected,
                     isEnabled: isEnabled,
-                    toggle: toggle
+                    setEnabled: setEnabled
                 )
             }
         }
@@ -196,7 +218,7 @@ private struct AppSublist: View {
     let apps: [AudioApp]
     let emptyText: String
     let isEnabled: (String) -> Bool
-    let toggle: (String) -> Void
+    let setEnabled: (String, Bool) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -223,7 +245,7 @@ private struct AppSublist: View {
                         ForEach(apps) { app in
                             Toggle(isOn: Binding(
                                 get: { isEnabled(app.bundleID) },
-                                set: { _ in toggle(app.bundleID) }
+                                set: { setEnabled(app.bundleID, $0) }
                             )) {
                                 Text(app.name)
                             }

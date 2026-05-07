@@ -84,6 +84,24 @@ open WisprDuck.xcodeproj
 
 Build and Run with **Cmd+R** in Xcode. Requires Xcode 15+ with the macOS 14.2+ SDK.
 
+For command-line verification:
+
+```bash
+./scripts/verify.sh
+```
+
+That validates plist/project files, builds the native app in Debug and Release with signing disabled, and runs the site lint/build checks.
+
+## Release Builds
+
+Create a reproducible unsigned zip locally:
+
+```bash
+./scripts/build-release.sh
+```
+
+The script writes `build/release/WisprDuck-<version>-<build>.zip` plus a SHA-256 checksum. By default the build number is the current git commit count; set `BUILD_NUMBER=...` to reproduce a specific release build. Set `CODE_SIGNING_ALLOWED=YES` and the usual Xcode signing environment when building from a machine with the Developer ID certificate installed.
+
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE) for details.

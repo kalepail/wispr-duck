@@ -87,8 +87,16 @@ final class AppSettings {
     }
 
     func toggleBundleID(_ bundleID: String) {
+        setBundleID(bundleID, enabled: !enabledBundleIDs.contains(bundleID))
+    }
+
+    func setBundleID(_ bundleID: String, enabled: Bool) {
         var ids = enabledBundleIDs
-        if ids.contains(bundleID) { ids.remove(bundleID) } else { ids.insert(bundleID) }
+        if enabled {
+            ids.insert(bundleID)
+        } else {
+            ids.remove(bundleID)
+        }
         enabledBundleIDs = ids
         onSettingsChanged?()
     }
@@ -105,8 +113,16 @@ final class AppSettings {
     }
 
     func toggleTriggerBundleID(_ bundleID: String) {
+        setTriggerBundleID(bundleID, enabled: !triggerBundleIDs.contains(bundleID))
+    }
+
+    func setTriggerBundleID(_ bundleID: String, enabled: Bool) {
         var ids = triggerBundleIDs
-        if ids.contains(bundleID) { ids.remove(bundleID) } else { ids.insert(bundleID) }
+        if enabled {
+            ids.insert(bundleID)
+        } else {
+            ids.remove(bundleID)
+        }
         triggerBundleIDs = ids
         onSettingsChanged?()
     }

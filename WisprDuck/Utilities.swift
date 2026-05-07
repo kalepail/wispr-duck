@@ -4,6 +4,26 @@ import CoreAudio
 /// URL for System Settings > Privacy & Security > Screen & System Audio Recording.
 /// macOS allows audio-only access in this pane.
 let privacySettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!
+let microphonePrivacySettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
+
+/// Human-readable Core Audio status for logs and user-facing diagnostics.
+func describeOSStatus(_ status: OSStatus) -> String {
+    guard status != noErr else { return "noErr" }
+
+    let code = UInt32(bitPattern: status)
+    let bytes = [
+        UInt8((code >> 24) & 0xff),
+        UInt8((code >> 16) & 0xff),
+        UInt8((code >> 8) & 0xff),
+        UInt8(code & 0xff),
+    ]
+
+    if bytes.allSatisfy({ $0 >= 32 && $0 < 127 }) {
+        return "\(status) ('\(String(bytes: bytes, encoding: .ascii) ?? "")')"
+    }
+
+    return "\(status)"
+}
 
 /// Get the PID for a Core Audio process object.
 func pidForProcessObject(_ objectID: AudioObjectID) -> pid_t? {

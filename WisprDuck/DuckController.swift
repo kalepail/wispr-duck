@@ -5,6 +5,7 @@ final class DuckController: ObservableObject {
     @Published private(set) var isDucked: Bool = false
     @Published private(set) var audioApps: [AudioApp] = []
     @Published private(set) var triggerEligibleApps: [AudioApp] = []
+    @Published private(set) var audioStatusMessage: String?
     let micMonitor = MicMonitor()
     private let tapManager = ProcessTapManager()
     private var settings: AppSettings
@@ -34,6 +35,9 @@ final class DuckController: ObservableObject {
             self.audioApps = self.tapManager.audioApps(from: processes)
             self.triggerEligibleApps = self.tapManager.audioApps(from: processes, includeAccessory: true)
         }
+        tapManager.setErrorHandler { [weak self] message in
+            self?.audioStatusMessage = message
+        }
         tapManager.startProcessListMonitoring()
 
         // Forward micMonitor changes so views observing DuckController
@@ -61,6 +65,12 @@ final class DuckController: ObservableObject {
                 guard let self else { return }
                 if !self.settings.isEnabled && self.isDucked {
                     self.restore()
+                } else if self.isDucked {
+                    self.isDucked = self.tapManager.reconcileActiveTaps(
+                        bundleIDs: self.settings.enabledBundleIDs,
+                        duckAll: self.settings.duckAllApps,
+                        duckLevel: Float(self.settings.duckLevel) / 100.0
+                    )
                 }
                 self.syncTriggerSettings()
             }
@@ -102,7 +112,10 @@ final class DuckController: ObservableObject {
         )
 
         if isDucked {
+            audioStatusMessage = nil
             startTriggerReevaluationTimer()
+        } else if audioStatusMessage == nil {
+            audioStatusMessage = "WisprDuck could not start system audio capture. Grant Screen & System Audio Recording permission."
         }
     }
 
@@ -122,6 +135,10 @@ final class DuckController: ObservableObject {
         stopTriggerReevaluationTimer()
         tapManager.restoreAll()
         isDucked = false
+    }
+
+    var currentIssueMessage: String? {
+        audioStatusMessage ?? micMonitor.monitoringIssue
     }
 
     private func startTriggerReevaluationTimer() {

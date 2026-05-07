@@ -42,6 +42,7 @@ final class ProcessTapManager {
     private var duckAllMode = false
     private var fadeOutTimer: DispatchWorkItem?
     private var onProcessListChanged: (([AudioProcess]) -> Void)?
+    private var onError: ((String) -> Void)?
     private var outputDeviceListenerBlock: AudioObjectPropertyListenerBlock?
 
     /// Cache for bundle ID → root app bundle ID resolution.
@@ -191,7 +192,7 @@ final class ProcessTapManager {
         fadeOutTimer = nil
 
         guard let outputUID = getDefaultOutputDeviceUID() else {
-            logger.error("Could not get output device UID")
+            reportError("WisprDuck could not read the current output device. Check macOS audio output and permissions.")
             return false
         }
 
@@ -201,13 +202,62 @@ final class ProcessTapManager {
         duckAllMode = duckAll
         startOutputDeviceMonitoring()
 
-        // Update existing taps (e.g. re-ducking after a cancelled fade-out)
-        for tap in activeTaps.values {
-            tap.updateDuckLevel(duckLevel)
+        return reconcileActiveTaps(
+            bundleIDs: bundleIDs,
+            duckAll: duckAll,
+            duckLevel: duckLevel,
+            outputDeviceUID: outputUID
+        )
+    }
+
+    /// Reconcile active taps with the current settings while ducking is already active.
+    @discardableResult
+    func reconcileActiveTaps(bundleIDs: Set<String>, duckAll: Bool, duckLevel: Float) -> Bool {
+        guard let outputUID = getDefaultOutputDeviceUID() else {
+            reportError("WisprDuck could not read the current output device. Check macOS audio output and permissions.")
+            return false
         }
 
-        // Create taps for any new matching processes
+        isDucking = true
+        currentBundleIDs = bundleIDs
+        currentDuckLevel = duckLevel
+        duckAllMode = duckAll
+
+        return reconcileActiveTaps(
+            bundleIDs: bundleIDs,
+            duckAll: duckAll,
+            duckLevel: duckLevel,
+            outputDeviceUID: outputUID
+        )
+    }
+
+    @discardableResult
+    private func reconcileActiveTaps(
+        bundleIDs: Set<String>,
+        duckAll: Bool,
+        duckLevel: Float,
+        outputDeviceUID: String
+    ) -> Bool {
         let processes = enumerateAudioProcesses()
+        let processesByPID = Dictionary(processes.map { ($0.pid, $0) }, uniquingKeysWith: { first, _ in first })
+
+        for pid in Array(activeTaps.keys) {
+            guard let tap = activeTaps[pid] else { continue }
+            guard let process = processesByPID[pid] else {
+                tap.stop()
+                activeTaps.removeValue(forKey: pid)
+                continue
+            }
+
+            let shouldDuck = duckAll || processMatchesSelection(process, selectedBundleIDs: bundleIDs)
+            if shouldDuck {
+                tap.updateDuckLevel(duckLevel)
+            } else {
+                tap.stop()
+                activeTaps.removeValue(forKey: pid)
+            }
+        }
+
         let toDuck = processes.filter { process in
             guard activeTaps[process.pid] == nil else { return false }
             if duckAll { return true }
@@ -219,8 +269,13 @@ final class ProcessTapManager {
                 processObjectID: process.objectID,
                 pid: process.pid
             )
-            if tap.start(outputDeviceUID: outputUID, duckLevel: duckLevel) {
+            if tap.start(outputDeviceUID: outputDeviceUID, duckLevel: duckLevel) {
                 activeTaps[process.pid] = tap
+            } else {
+                reportError(
+                    tap.lastError
+                    ?? "WisprDuck could not start system audio capture. Grant Screen & System Audio Recording permission."
+                )
             }
         }
 
@@ -250,9 +305,9 @@ final class ProcessTapManager {
         // Calculate how long the ramp will actually take based on current duck level.
         // The linear ramp in ProcessTap sweeps 0→1 in 1s, so a partial sweep from
         // currentDuckLevel→1.0 takes (1 - currentDuckLevel) * 1.0 seconds.
-        // Fire early so scheduling delay lands the tap destruction right at 100%.
+        // Wait for the ramp to finish before tearing down taps, with a small scheduling cushion.
         let rampDuration: Double = 1.0
-        let estimatedFadeTime = max(0, Double(1.0 - currentDuckLevel) * rampDuration - 0.25)
+        let estimatedFadeTime = max(0.05, Double(1.0 - currentDuckLevel) * rampDuration + 0.05)
 
         // Ramp all taps toward full volume
         for tap in activeTaps.values {
@@ -305,12 +360,17 @@ final class ProcessTapManager {
             }
         }
 
-        AudioObjectAddPropertyListenerBlock(
+        let status = AudioObjectAddPropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject),
             &address,
             listenerQueue,
             processListListenerBlock!
         )
+        guard status == noErr else {
+            logger.error("Could not monitor audio process list: \(describeOSStatus(status))")
+            processListListenerBlock = nil
+            return
+        }
     }
 
     private func stopProcessListMonitoring() {
@@ -322,12 +382,15 @@ final class ProcessTapManager {
             mElement: kAudioObjectPropertyElementMain
         )
 
-        AudioObjectRemovePropertyListenerBlock(
+        let status = AudioObjectRemovePropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject),
             &address,
             listenerQueue,
             block
         )
+        if status != noErr {
+            logger.error("Could not stop monitoring audio process list: \(describeOSStatus(status))")
+        }
         processListListenerBlock = nil
     }
 
@@ -347,12 +410,17 @@ final class ProcessTapManager {
             }
         }
 
-        AudioObjectAddPropertyListenerBlock(
+        let status = AudioObjectAddPropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject),
             &address,
             listenerQueue,
             outputDeviceListenerBlock!
         )
+        guard status == noErr else {
+            logger.error("Could not monitor default output device: \(describeOSStatus(status))")
+            outputDeviceListenerBlock = nil
+            return
+        }
     }
 
     private func stopOutputDeviceMonitoring() {
@@ -362,12 +430,15 @@ final class ProcessTapManager {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        AudioObjectRemovePropertyListenerBlock(
+        let status = AudioObjectRemovePropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject),
             &address,
             listenerQueue,
             block
         )
+        if status != noErr {
+            logger.error("Could not stop monitoring default output device: \(describeOSStatus(status))")
+        }
         outputDeviceListenerBlock = nil
     }
 
@@ -387,7 +458,10 @@ final class ProcessTapManager {
         // Only manage taps while actively ducking
         guard isDucking else { return }
 
-        guard let outputUID = getDefaultOutputDeviceUID() else { return }
+        guard let outputUID = getDefaultOutputDeviceUID() else {
+            reportError("WisprDuck could not read the current output device. Check macOS audio output and permissions.")
+            return
+        }
 
         // Create taps for new matching processes
         let toDuck = processes.filter { process in
@@ -403,6 +477,11 @@ final class ProcessTapManager {
             )
             if tap.start(outputDeviceUID: outputUID, duckLevel: currentDuckLevel) {
                 activeTaps[process.pid] = tap
+            } else {
+                reportError(
+                    tap.lastError
+                    ?? "WisprDuck could not start system audio capture. Grant Screen & System Audio Recording permission."
+                )
             }
         }
 
@@ -421,6 +500,11 @@ final class ProcessTapManager {
         onProcessListChanged = handler
     }
 
+    /// Set a callback for recoverable Core Audio failures that should be visible in the UI.
+    func setErrorHandler(_ handler: @escaping (String) -> Void) {
+        onError = handler
+    }
+
     // MARK: - Output Device Helpers
 
     private func getDefaultOutputDeviceUID() -> String? {
@@ -436,19 +520,32 @@ final class ProcessTapManager {
             AudioObjectID(kAudioObjectSystemObject),
             &address, 0, nil, &size, &deviceID
         )
-        guard status == noErr, deviceID != kAudioObjectUnknown else { return nil }
+        guard status == noErr, deviceID != kAudioObjectUnknown else {
+            logger.error("Could not get default output device: \(describeOSStatus(status))")
+            return nil
+        }
 
         var uidAddress = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyDeviceUID,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        var uid: CFString = "" as CFString
-        var uidSize = UInt32(MemoryLayout<CFString>.size)
+        var uid: Unmanaged<CFString>?
+        var uidSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
 
         status = AudioObjectGetPropertyData(deviceID, &uidAddress, 0, nil, &uidSize, &uid)
-        guard status == noErr else { return nil }
-        return uid as String
+        guard status == noErr, let uid else {
+            logger.error("Could not get default output device UID: \(describeOSStatus(status))")
+            return nil
+        }
+        return uid.takeRetainedValue() as String
+    }
+
+    private func reportError(_ message: String) {
+        logger.error("\(message)")
+        DispatchQueue.main.async { [weak self] in
+            self?.onError?(message)
+        }
     }
 
     deinit {

@@ -22,8 +22,11 @@ struct WisprDuckApp: App {
                     if !settings.hasCompletedOnboarding {
                         NSApp.setActivationPolicy(.regular)
                         openWindow(id: "welcome")
+                        NSApp.activate(ignoringOtherApps: true)
                     }
                 }
+                .accessibilityLabel("WisprDuck")
+                .accessibilityValue(menuBarStatus)
         }
         .menuBarExtraStyle(.window)
 
@@ -36,5 +39,11 @@ struct WisprDuckApp: App {
         .windowResizability(.contentSize)
         .defaultPosition(.center)
         .windowStyle(.hiddenTitleBar)
+    }
+
+    private var menuBarStatus: String {
+        if !settings.isEnabled { return "Disabled" }
+        if duckController.isDucked { return "Ducked" }
+        return "Monitoring"
     }
 }

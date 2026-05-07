@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate project files
+        run: plutil -lint WisprDuck/Info.plist WisprDuck/WisprDuck.entitlements WisprDuck.xcodeproj/project.pbxproj
+
+      - name: Build native app
+        run: |
+          xcodebuild \
+            -project WisprDuck.xcodeproj \
+            -scheme WisprDuck \
+            -configuration Debug \
+            -derivedDataPath DerivedData/CI \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Build native release
+        run: |
+          xcodebuild \
+            -project WisprDuck.xcodeproj \
+            -scheme WisprDuck \
+            -configuration Release \
+            -derivedDataPath DerivedData/CI \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install site dependencies
+        run: npm ci --prefix site
+
+      - name: Lint site
+        run: npm run lint --prefix site
+
+      - name: Build site
+        run: npm run build --prefix site

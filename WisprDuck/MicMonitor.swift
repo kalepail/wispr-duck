@@ -1,11 +1,15 @@
 import CoreAudio
 import Combine
 import AppKit
+import os
+
+private let logger = Logger(subsystem: "com.wisprduck", category: "MicMonitor")
 
 final class MicMonitor: ObservableObject {
     // Ensure NSMicrophoneUsageDescription is present if the app requests mic access.
     @Published private(set) var isMicActive: Bool = false
     @Published private(set) var shouldTriggerDuck: Bool = false
+    @Published private(set) var monitoringIssue: String?
 
     /// When true, any app using the mic triggers ducking.
     var triggerAllApps: Bool = true {
@@ -78,12 +82,18 @@ final class MicMonitor: ObservableObject {
             self?.bindToCurrentInputDevice()
         }
 
-        AudioObjectAddPropertyListenerBlock(
+        let status = AudioObjectAddPropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject),
             &address,
             listenerQueue,
             defaultDeviceListenerBlock!
         )
+        guard status == noErr else {
+            reportIssue("WisprDuck could not monitor the default microphone: \(describeOSStatus(status))")
+            defaultDeviceListenerBlock = nil
+            return
+        }
+        clearIssue()
     }
 
     private func removeDefaultDeviceListener() {
@@ -93,12 +103,15 @@ final class MicMonitor: ObservableObject {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        AudioObjectRemovePropertyListenerBlock(
+        let status = AudioObjectRemovePropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject),
             &address,
             listenerQueue,
             block
         )
+        if status != noErr {
+            logger.error("Could not stop monitoring the default microphone: \(describeOSStatus(status))")
+        }
         defaultDeviceListenerBlock = nil
     }
 
@@ -116,12 +129,18 @@ final class MicMonitor: ObservableObject {
             self?.reevaluateTriggerState()
         }
 
-        AudioObjectAddPropertyListenerBlock(
+        let status = AudioObjectAddPropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject),
             &address,
             listenerQueue,
             deviceListListenerBlock!
         )
+        guard status == noErr else {
+            reportIssue("WisprDuck could not monitor microphone devices: \(describeOSStatus(status))")
+            deviceListListenerBlock = nil
+            return
+        }
+        clearIssue()
     }
 
     private func removeDeviceListListener() {
@@ -131,12 +150,15 @@ final class MicMonitor: ObservableObject {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        AudioObjectRemovePropertyListenerBlock(
+        let status = AudioObjectRemovePropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject),
             &address,
             listenerQueue,
             block
         )
+        if status != noErr {
+            logger.error("Could not stop monitoring microphone devices: \(describeOSStatus(status))")
+        }
         deviceListListenerBlock = nil
     }
 
@@ -146,6 +168,7 @@ final class MicMonitor: ObservableObject {
         removeDeviceListener()
 
         guard let deviceID = getDefaultInputDevice() else {
+            reportIssue("WisprDuck could not find a default microphone. Choose an input device in System Settings.")
             DispatchQueue.main.async {
                 self.isMicActive = false
                 self.shouldTriggerDuck = false
@@ -166,12 +189,18 @@ final class MicMonitor: ObservableObject {
             self?.updateMicStatus()
         }
 
-        AudioObjectAddPropertyListenerBlock(
+        let status = AudioObjectAddPropertyListenerBlock(
             currentDeviceID,
             &address,
             listenerQueue,
             deviceListenerBlock!
         )
+        guard status == noErr else {
+            reportIssue("WisprDuck could not monitor microphone activity: \(describeOSStatus(status))")
+            deviceListenerBlock = nil
+            return
+        }
+        clearIssue()
     }
 
     private func removeDeviceListener() {
@@ -181,12 +210,15 @@ final class MicMonitor: ObservableObject {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        AudioObjectRemovePropertyListenerBlock(
+        let status = AudioObjectRemovePropertyListenerBlock(
             currentDeviceID,
             &address,
             listenerQueue,
             block
         )
+        if status != noErr {
+            logger.error("Could not stop monitoring microphone activity: \(describeOSStatus(status))")
+        }
         deviceListenerBlock = nil
     }
 
@@ -225,6 +257,9 @@ final class MicMonitor: ObservableObject {
 
         if status == noErr {
             inputDeviceListenerBlocks[deviceID] = block
+            clearIssue()
+        } else {
+            reportIssue("WisprDuck could not monitor an input device: \(describeOSStatus(status))")
         }
     }
 
@@ -235,12 +270,15 @@ final class MicMonitor: ObservableObject {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        AudioObjectRemovePropertyListenerBlock(
+        let status = AudioObjectRemovePropertyListenerBlock(
             deviceID,
             &address,
             listenerQueue,
             block
         )
+        if status != noErr {
+            logger.error("Could not stop monitoring input device \(deviceID): \(describeOSStatus(status))")
+        }
     }
 
     private func removeAllInputDeviceListeners() {
@@ -263,12 +301,18 @@ final class MicMonitor: ObservableObject {
             self?.reevaluateTriggerState()
         }
 
-        AudioObjectAddPropertyListenerBlock(
+        let status = AudioObjectAddPropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject),
             &address,
             listenerQueue,
             processListListenerBlock!
         )
+        guard status == noErr else {
+            reportIssue("WisprDuck could not monitor audio process activity: \(describeOSStatus(status))")
+            processListListenerBlock = nil
+            return
+        }
+        clearIssue()
     }
 
     private func removeProcessListListener() {
@@ -278,12 +322,15 @@ final class MicMonitor: ObservableObject {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        AudioObjectRemovePropertyListenerBlock(
+        let status = AudioObjectRemovePropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject),
             &address,
             listenerQueue,
             block
         )
+        if status != noErr {
+            logger.error("Could not stop monitoring audio process activity: \(describeOSStatus(status))")
+        }
         processListListenerBlock = nil
     }
 
@@ -324,6 +371,9 @@ final class MicMonitor: ObservableObject {
 
         if status == noErr {
             perProcessListenerBlocks[objectID] = block
+            clearIssue()
+        } else {
+            reportIssue("WisprDuck could not monitor an app's microphone activity: \(describeOSStatus(status))")
         }
     }
 
@@ -334,12 +384,15 @@ final class MicMonitor: ObservableObject {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        AudioObjectRemovePropertyListenerBlock(
+        let status = AudioObjectRemovePropertyListenerBlock(
             objectID,
             &address,
             listenerQueue,
             block
         )
+        if status != noErr {
+            logger.error("Could not stop monitoring app microphone activity \(objectID): \(describeOSStatus(status))")
+        }
     }
 
     private func removeAllPerProcessListeners() {
@@ -569,5 +622,18 @@ final class MicMonitor: ObservableObject {
 
         guard status == noErr, deviceID != kAudioObjectUnknown else { return nil }
         return deviceID
+    }
+
+    private func reportIssue(_ message: String) {
+        logger.error("\(message)")
+        DispatchQueue.main.async { [weak self] in
+            self?.monitoringIssue = message
+        }
+    }
+
+    private func clearIssue() {
+        DispatchQueue.main.async { [weak self] in
+            self?.monitoringIssue = nil
+        }
     }
 }
