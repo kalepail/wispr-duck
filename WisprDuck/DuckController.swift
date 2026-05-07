@@ -137,6 +137,10 @@ final class DuckController: ObservableObject {
         isDucked = false
     }
 
+    func requestSystemAudioPermissionPrompt() -> String? {
+        tapManager.requestSystemAudioPermissionPrompt()
+    }
+
     var currentIssueMessage: String? {
         audioStatusMessage ?? micMonitor.monitoringIssue
     }

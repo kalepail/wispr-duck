@@ -44,6 +44,7 @@ final class ProcessTapManager {
     private var onProcessListChanged: (([AudioProcess]) -> Void)?
     private var onError: ((String) -> Void)?
     private var outputDeviceListenerBlock: AudioObjectPropertyListenerBlock?
+    private var systemAudioPrimer: SystemAudioPermissionPrimer?
 
     /// Cache for bundle ID → root app bundle ID resolution.
     /// Avoids repeated NSWorkspace lookups for the same helper bundle IDs.
@@ -505,6 +506,28 @@ final class ProcessTapManager {
         onError = handler
     }
 
+    /// Attempts to trigger macOS' System Audio Recording prompt during onboarding.
+    /// macOS shows this prompt when recording starts from an aggregate device that contains a tap.
+    func requestSystemAudioPermissionPrompt() -> String? {
+        guard systemAudioPrimer == nil else { return nil }
+        guard let outputUID = getDefaultOutputDeviceUID() else {
+            return "WisprDuck could not read the current output device. Open System Audio settings and allow WisprDuck."
+        }
+
+        let primer = SystemAudioPermissionPrimer()
+        guard primer.start(outputDeviceUID: outputUID) else {
+            return primer.lastError ?? "WisprDuck could not start a system audio permission request."
+        }
+
+        systemAudioPrimer = primer
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.systemAudioPrimer?.stop()
+            self?.systemAudioPrimer = nil
+        }
+
+        return nil
+    }
+
     // MARK: - Output Device Helpers
 
     private func getDefaultOutputDeviceUID() -> String? {
@@ -551,6 +574,133 @@ final class ProcessTapManager {
     deinit {
         stopProcessListMonitoring()
         stopOutputDeviceMonitoring()
+        systemAudioPrimer?.stop()
         restoreAll()
+    }
+}
+
+/// A short-lived, unmuted Core Audio tap used only to trigger the system-audio
+/// recording permission prompt during onboarding.
+private final class SystemAudioPermissionPrimer {
+    private var tapID: AudioObjectID = kAudioObjectUnknown
+    private var aggregateDeviceID: AudioObjectID = kAudioObjectUnknown
+    private var ioProcID: AudioDeviceIOProcID?
+    private let tapUUID = UUID()
+    private let aggregateUUID = UUID()
+    private let ioQueue = DispatchQueue(label: "com.wisprduck.systemaudioprimer", qos: .userInitiated)
+    private(set) var lastError: String?
+
+    func start(outputDeviceUID: String) -> Bool {
+        lastError = nil
+
+        let tapDesc = CATapDescription(stereoGlobalTapButExcludeProcesses: [AudioObjectID]())
+        tapDesc.uuid = tapUUID
+        tapDesc.name = "WisprDuck Permission Check"
+        tapDesc.muteBehavior = .unmuted
+        tapDesc.isPrivate = true
+
+        var status = AudioHardwareCreateProcessTap(tapDesc, &tapID)
+        guard status == noErr else {
+            lastError = "Could not create a system audio permission tap: \(describeOSStatus(status))"
+            logger.error("\(self.lastError ?? "Unknown system audio permission tap error")")
+            return false
+        }
+
+        let aggDesc: [String: Any] = [
+            kAudioAggregateDeviceNameKey: "WisprDuck Permission Check",
+            kAudioAggregateDeviceUIDKey: aggregateUUID.uuidString,
+            kAudioAggregateDeviceMainSubDeviceKey: outputDeviceUID,
+            kAudioAggregateDeviceClockDeviceKey: outputDeviceUID,
+            kAudioAggregateDeviceIsPrivateKey: true,
+            kAudioAggregateDeviceIsStackedKey: false,
+            kAudioAggregateDeviceTapAutoStartKey: true,
+            kAudioAggregateDeviceSubDeviceListKey: [
+                [
+                    kAudioSubDeviceUIDKey: outputDeviceUID,
+                    kAudioSubDeviceDriftCompensationKey: false,
+                ]
+            ],
+            kAudioAggregateDeviceTapListKey: [
+                [
+                    kAudioSubTapUIDKey: tapUUID.uuidString,
+                    kAudioSubTapDriftCompensationKey: true,
+                ]
+            ],
+        ]
+
+        status = AudioHardwareCreateAggregateDevice(aggDesc as CFDictionary, &aggregateDeviceID)
+        guard status == noErr else {
+            lastError = "Could not create a system audio permission device: \(describeOSStatus(status))"
+            logger.error("\(self.lastError ?? "Unknown system audio permission device error")")
+            cleanupTap()
+            return false
+        }
+
+        status = AudioDeviceCreateIOProcIDWithBlock(&ioProcID, aggregateDeviceID, ioQueue) { _, _, _, outOutputData, _ in
+            let outputs = UnsafeMutableAudioBufferListPointer(outOutputData)
+            for output in outputs {
+                if let data = output.mData {
+                    memset(data, 0, Int(output.mDataByteSize))
+                }
+            }
+        }
+        guard status == noErr else {
+            lastError = "Could not create a system audio permission callback: \(describeOSStatus(status))"
+            logger.error("\(self.lastError ?? "Unknown system audio permission callback error")")
+            cleanupAggregateDevice()
+            cleanupTap()
+            return false
+        }
+
+        status = AudioDeviceStart(aggregateDeviceID, ioProcID)
+        guard status == noErr else {
+            lastError = "Could not start the system audio permission request: \(describeOSStatus(status))"
+            logger.error("\(self.lastError ?? "Unknown system audio permission start error")")
+            cleanupIOProc()
+            cleanupAggregateDevice()
+            cleanupTap()
+            return false
+        }
+
+        return true
+    }
+
+    func stop() {
+        if let ioProcID {
+            let status = AudioDeviceStop(aggregateDeviceID, ioProcID)
+            if status != noErr {
+                logger.error("Could not stop system audio permission primer: \(describeOSStatus(status))")
+            }
+        }
+        cleanupIOProc()
+        cleanupAggregateDevice()
+        cleanupTap()
+    }
+
+    private func cleanupIOProc() {
+        guard let ioProcID else { return }
+        let status = AudioDeviceDestroyIOProcID(aggregateDeviceID, ioProcID)
+        if status != noErr {
+            logger.error("Could not destroy system audio permission callback: \(describeOSStatus(status))")
+        }
+        self.ioProcID = nil
+    }
+
+    private func cleanupAggregateDevice() {
+        guard aggregateDeviceID != kAudioObjectUnknown else { return }
+        let status = AudioHardwareDestroyAggregateDevice(aggregateDeviceID)
+        if status != noErr {
+            logger.error("Could not destroy system audio permission device: \(describeOSStatus(status))")
+        }
+        aggregateDeviceID = kAudioObjectUnknown
+    }
+
+    private func cleanupTap() {
+        guard tapID != kAudioObjectUnknown else { return }
+        let status = AudioHardwareDestroyProcessTap(tapID)
+        if status != noErr {
+            logger.error("Could not destroy system audio permission tap: \(describeOSStatus(status))")
+        }
+        tapID = kAudioObjectUnknown
     }
 }

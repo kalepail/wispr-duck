@@ -31,7 +31,7 @@ struct WisprDuckApp: App {
         .menuBarExtraStyle(.window)
 
         Window("Welcome", id: "welcome") {
-            WelcomeView(settings: settings)
+            WelcomeView(settings: settings, duckController: duckController)
                 .onDisappear {
                     NSApp.setActivationPolicy(.accessory)
                 }
