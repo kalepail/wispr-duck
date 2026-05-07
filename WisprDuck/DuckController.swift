@@ -9,6 +9,7 @@ final class DuckController: ObservableObject {
     private let tapManager = ProcessTapManager()
     private var settings: AppSettings
     private var cancellables = Set<AnyCancellable>()
+    private var triggerReevaluationTimer: DispatchSourceTimer?
 
     init(settings: AppSettings) {
         self.settings = settings
@@ -99,9 +100,14 @@ final class DuckController: ObservableObject {
             duckAll: duckAll,
             duckLevel: duckLevel
         )
+
+        if isDucked {
+            startTriggerReevaluationTimer()
+        }
     }
 
     private func restore() {
+        stopTriggerReevaluationTimer()
         tapManager.restoreAllWithFade()
         isDucked = false
     }
@@ -113,7 +119,24 @@ final class DuckController: ObservableObject {
 
     func restoreAndStop() {
         // Always clean up — taps may still be alive during a fade-out even when isDucked is false
+        stopTriggerReevaluationTimer()
         tapManager.restoreAll()
         isDucked = false
+    }
+
+    private func startTriggerReevaluationTimer() {
+        guard triggerReevaluationTimer == nil else { return }
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + 0.25, repeating: 0.5)
+        timer.setEventHandler { [weak self] in
+            self?.micMonitor.refreshTriggerState()
+        }
+        triggerReevaluationTimer = timer
+        timer.resume()
+    }
+
+    private func stopTriggerReevaluationTimer() {
+        triggerReevaluationTimer?.cancel()
+        triggerReevaluationTimer = nil
     }
 }

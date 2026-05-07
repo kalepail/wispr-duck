@@ -23,7 +23,9 @@ final class MicMonitor: ObservableObject {
     private var currentDeviceID: AudioDeviceID = kAudioObjectUnknown
     private var deviceListenerBlock: AudioObjectPropertyListenerBlock?
     private var defaultDeviceListenerBlock: AudioObjectPropertyListenerBlock?
+    private var deviceListListenerBlock: AudioObjectPropertyListenerBlock?
     private var processListListenerBlock: AudioObjectPropertyListenerBlock?
+    private var inputDeviceListenerBlocks: [AudioDeviceID: AudioObjectPropertyListenerBlock] = [:]
     private var perProcessListenerBlocks: [AudioObjectID: AudioObjectPropertyListenerBlock] = [:]
     private let listenerQueue = DispatchQueue(label: "com.wisprduck.micmonitor", qos: .userInitiated)
     private let listenerQueueKey = DispatchSpecificKey<Void>()
@@ -32,8 +34,10 @@ final class MicMonitor: ObservableObject {
         listenerQueue.setSpecific(key: listenerQueueKey, value: ())
         performOnListenerQueue {
             setupDefaultDeviceListener()
+            setupDeviceListListener()
             setupProcessListListener()
             bindToCurrentInputDevice()
+            refreshInputDeviceListeners()
             refreshPerProcessListeners()
         }
     }
@@ -46,7 +50,9 @@ final class MicMonitor: ObservableObject {
         performOnListenerQueue {
             removeDeviceListener()
             removeDefaultDeviceListener()
+            removeDeviceListListener()
             removeProcessListListener()
+            removeAllInputDeviceListeners()
             removeAllPerProcessListeners()
         }
     }
@@ -94,6 +100,44 @@ final class MicMonitor: ObservableObject {
             block
         )
         defaultDeviceListenerBlock = nil
+    }
+
+    // MARK: - Audio Device List Monitoring
+
+    private func setupDeviceListListener() {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        deviceListListenerBlock = { [weak self] _, _ in
+            self?.refreshInputDeviceListeners()
+            self?.reevaluateTriggerState()
+        }
+
+        AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            listenerQueue,
+            deviceListListenerBlock!
+        )
+    }
+
+    private func removeDeviceListListener() {
+        guard let block = deviceListListenerBlock else { return }
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        AudioObjectRemovePropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            listenerQueue,
+            block
+        )
+        deviceListListenerBlock = nil
     }
 
     // MARK: - Input Device "Is Running" Monitoring
@@ -144,6 +188,65 @@ final class MicMonitor: ObservableObject {
             block
         )
         deviceListenerBlock = nil
+    }
+
+    // MARK: - All Input Device Running Monitoring
+
+    private func refreshInputDeviceListeners() {
+        let deviceIDs = Set(getInputDeviceIDs())
+        let tracked = Set(inputDeviceListenerBlocks.keys)
+
+        for deviceID in tracked.subtracting(deviceIDs) {
+            removeInputDeviceListener(deviceID)
+        }
+
+        for deviceID in deviceIDs.subtracting(tracked) {
+            addInputDeviceListener(deviceID)
+        }
+    }
+
+    private func addInputDeviceListener(_ deviceID: AudioDeviceID) {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceIsRunningSomewhere,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            self?.reevaluateTriggerState()
+        }
+
+        let status = AudioObjectAddPropertyListenerBlock(
+            deviceID,
+            &address,
+            listenerQueue,
+            block
+        )
+
+        if status == noErr {
+            inputDeviceListenerBlocks[deviceID] = block
+        }
+    }
+
+    private func removeInputDeviceListener(_ deviceID: AudioDeviceID) {
+        guard let block = inputDeviceListenerBlocks.removeValue(forKey: deviceID) else { return }
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceIsRunningSomewhere,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        AudioObjectRemovePropertyListenerBlock(
+            deviceID,
+            &address,
+            listenerQueue,
+            block
+        )
+    }
+
+    private func removeAllInputDeviceListeners() {
+        for deviceID in Array(inputDeviceListenerBlocks.keys) {
+            removeInputDeviceListener(deviceID)
+        }
     }
 
     // MARK: - Process Object List Monitoring
@@ -203,7 +306,7 @@ final class MicMonitor: ObservableObject {
 
     private func addPerProcessListener(_ objectID: AudioObjectID) {
         var address = AudioObjectPropertyAddress(
-            mSelector: kAudioProcessPropertyIsRunning,
+            mSelector: kAudioProcessPropertyIsRunningInput,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
@@ -227,7 +330,7 @@ final class MicMonitor: ObservableObject {
     private func removePerProcessListener(_ objectID: AudioObjectID) {
         guard let block = perProcessListenerBlocks.removeValue(forKey: objectID) else { return }
         var address = AudioObjectPropertyAddress(
-            mSelector: kAudioProcessPropertyIsRunning,
+            mSelector: kAudioProcessPropertyIsRunningInput,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
@@ -256,8 +359,14 @@ final class MicMonitor: ObservableObject {
         }
     }
 
+    func refreshTriggerState() {
+        listenerQueue.async { [weak self] in
+            self?.reevaluateTriggerState()
+        }
+    }
+
     private func updateMicStatus() {
-        let micActive = isDeviceRunningSomewhere()
+        let micActive = isAnyInputDeviceRunningSomewhere()
         DispatchQueue.main.async {
             self.isMicActive = micActive
         }
@@ -273,15 +382,7 @@ final class MicMonitor: ObservableObject {
     /// and publish the result.
     private func reevaluateTriggerState(micActive: Bool? = nil) {
         // Read CoreAudio state on the current (listener) queue — these are fast, thread-safe reads
-        let deviceActive = micActive ?? isDeviceRunningSomewhere()
-
-        // Early out: if device-level mic is not active, skip process enumeration
-        guard deviceActive else {
-            DispatchQueue.main.async {
-                self.shouldTriggerDuck = false
-            }
-            return
-        }
+        let deviceActive = micActive ?? isAnyInputDeviceRunningSomewhere()
 
         // Gather process-level data while still on the listener queue
         let objectIDs = getAudioProcessObjectIDs()
@@ -300,8 +401,9 @@ final class MicMonitor: ObservableObject {
         // Dispatch to main to safely read configuration and publish result
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            self.isMicActive = deviceActive || !inputBundleIDs.isEmpty
             if self.triggerAllApps {
-                self.shouldTriggerDuck = !inputBundleIDs.isEmpty
+                self.shouldTriggerDuck = deviceActive || !inputBundleIDs.isEmpty
                 return
             }
             let resolver = self.rootBundleIDResolver
@@ -324,6 +426,23 @@ final class MicMonitor: ObservableObject {
         var size = UInt32(MemoryLayout<UInt32>.size)
         let status = AudioObjectGetPropertyData(currentDeviceID, &address, 0, nil, &size, &isRunning)
         return status == noErr && isRunning != 0
+    }
+
+    private func isAnyInputDeviceRunningSomewhere() -> Bool {
+        for deviceID in getInputDeviceIDs() {
+            var address = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyDeviceIsRunningSomewhere,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+            var isRunning: UInt32 = 0
+            var size = UInt32(MemoryLayout<UInt32>.size)
+            let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &isRunning)
+            if status == noErr && isRunning != 0 {
+                return true
+            }
+        }
+        return false
     }
 
     // MARK: - Audio Process Helpers
@@ -350,6 +469,58 @@ final class MicMonitor: ObservableObject {
         )
         guard status == noErr else { return [] }
         return objectIDs
+    }
+
+    private func getInputDeviceIDs() -> [AudioDeviceID] {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        var size: UInt32 = 0
+        var status = AudioObjectGetPropertyDataSize(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address, 0, nil, &size
+        )
+        guard status == noErr, size > 0 else { return [] }
+
+        let count = Int(size) / MemoryLayout<AudioDeviceID>.size
+        var deviceIDs = [AudioDeviceID](repeating: 0, count: count)
+        status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address, 0, nil, &size, &deviceIDs
+        )
+        guard status == noErr else { return [] }
+
+        return deviceIDs.filter { deviceSupportsInput($0) }
+    }
+
+    private func deviceSupportsInput(_ deviceID: AudioDeviceID) -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreamConfiguration,
+            mScope: kAudioDevicePropertyScopeInput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        var size: UInt32 = 0
+        let status = AudioObjectGetPropertyDataSize(deviceID, &address, 0, nil, &size)
+        guard status == noErr, size >= UInt32(MemoryLayout<AudioBufferList>.size) else { return false }
+
+        let bufferListPointer = UnsafeMutableRawPointer.allocate(
+            byteCount: Int(size),
+            alignment: MemoryLayout<AudioBufferList>.alignment
+        )
+        defer { bufferListPointer.deallocate() }
+
+        let audioBufferList = bufferListPointer.assumingMemoryBound(to: AudioBufferList.self)
+        var mutableSize = size
+        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &mutableSize, audioBufferList) == noErr else {
+            return false
+        }
+
+        let buffers = UnsafeMutableAudioBufferListPointer(audioBufferList)
+        return buffers.contains { $0.mNumberChannels > 0 }
     }
 
     private func isProcessRunningInput(_ objectID: AudioObjectID) -> Bool {
