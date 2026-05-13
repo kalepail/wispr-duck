@@ -41,6 +41,7 @@ final class ProcessTapManager {
     private var currentBundleIDs: Set<String> = []
     private var duckAllMode = false
     private var fadeOutTimer: DispatchWorkItem?
+    private var fadeOutGeneration = 0
     private var onProcessListChanged: (([AudioProcess]) -> Void)?
     private var onError: ((String) -> Void)?
     private var outputDeviceListenerBlock: AudioObjectPropertyListenerBlock?
@@ -191,6 +192,7 @@ final class ProcessTapManager {
         // Cancel any pending fade-out destruction
         fadeOutTimer?.cancel()
         fadeOutTimer = nil
+        fadeOutGeneration += 1
 
         guard let outputUID = getDefaultOutputDeviceUID() else {
             reportError("WisprDuck could not read the current output device. Check macOS audio output and permissions.")
@@ -289,6 +291,7 @@ final class ProcessTapManager {
         isDucking = false
         fadeOutTimer?.cancel()
         fadeOutTimer = nil
+        fadeOutGeneration += 1
 
         for tap in activeTaps.values {
             tap.stop()
@@ -302,6 +305,15 @@ final class ProcessTapManager {
     /// Timer fires just before the ramp completes so the tap destruction pop lands at 100%.
     func restoreAllWithFade() {
         isDucking = false
+        fadeOutGeneration += 1
+        let generation = fadeOutGeneration
+
+        guard !activeTaps.isEmpty else {
+            fadeOutTimer?.cancel()
+            fadeOutTimer = nil
+            stopOutputDeviceMonitoring()
+            return
+        }
 
         // Calculate how long the ramp will actually take based on current duck level.
         // The linear ramp in ProcessTap sweeps 0→1 in 1s, so a partial sweep from
@@ -319,6 +331,7 @@ final class ProcessTapManager {
         // If duck() is called before this fires, it cancels the timer and reuses the taps.
         let workItem = DispatchWorkItem { [weak self] in
             guard let self else { return }
+            guard !self.isDucking, self.fadeOutGeneration == generation else { return }
             for tap in self.activeTaps.values {
                 tap.stop()
             }

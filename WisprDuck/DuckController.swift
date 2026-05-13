@@ -63,16 +63,26 @@ final class DuckController: ObservableObject {
         settings.onSettingsChanged = { [weak self] in
             DispatchQueue.main.async {
                 guard let self else { return }
-                if !self.settings.isEnabled && self.isDucked {
-                    self.restore()
-                } else if self.isDucked {
-                    self.isDucked = self.tapManager.reconcileActiveTaps(
-                        bundleIDs: self.settings.enabledBundleIDs,
-                        duckAll: self.settings.duckAllApps,
-                        duckLevel: Float(self.settings.duckLevel) / 100.0
-                    )
-                }
+
                 self.syncTriggerSettings()
+
+                guard self.settings.isEnabled else {
+                    self.restoreAndStop()
+                    return
+                }
+
+                if self.isDucked {
+                    if self.micMonitor.shouldTriggerDuck {
+                        self.isDucked = self.tapManager.reconcileActiveTaps(
+                            bundleIDs: self.settings.enabledBundleIDs,
+                            duckAll: self.settings.duckAllApps,
+                            duckLevel: Float(self.settings.duckLevel) / 100.0
+                        )
+                    } else {
+                        self.restore()
+                    }
+                }
+                self.micMonitor.refreshTriggerState()
             }
         }
     }

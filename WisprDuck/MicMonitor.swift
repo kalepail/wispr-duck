@@ -441,11 +441,11 @@ final class MicMonitor: ObservableObject {
         let objectIDs = getAudioProcessObjectIDs()
         let myPID = ProcessInfo.processInfo.processIdentifier
 
-        // Collect (resolved bundle ID) for each process currently using mic input
+        // Collect the resolved bundle IDs for processes currently using mic input.
         var inputBundleIDs: [String] = []
         for objectID in objectIDs {
-            guard isProcessRunningInput(objectID) else { continue }
             guard let pid = pidForProcessObject(objectID), pid != myPID else { continue }
+            guard isProcessRunningInput(objectID) else { continue }
             if let bundleID = bundleIDForProcess(pid) {
                 inputBundleIDs.append(bundleID)
             }
