@@ -16,3 +16,16 @@ site/dist/
 
 # Claude
 .claude/
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.p8
+*.pem
+*.key
+*.mobileprovision
+*.cer
+*.p12
+private_keys/
+wispr-duck-certs/

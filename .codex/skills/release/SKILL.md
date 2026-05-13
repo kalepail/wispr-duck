@@ -114,10 +114,10 @@ ditto -c -k --keepParent /tmp/WisprDuckExport/WisprDuck.app /tmp/WisprDuck-$ARGU
 xcrun notarytool submit /tmp/WisprDuck-$ARGUMENTS.zip --keychain-profile "WisprDuck-Notarize" --wait
 ```
 
-If the keychain profile is missing, ask the user to run:
+If the keychain profile is missing, ask the user to create it with their local App Store Connect API key:
 
 ```
-xcrun notarytool store-credentials "WisprDuck-Notarize" --key ~/Desktop/wispr-duck-certs/AuthKey_4MM3YQXN45.p8 --key-id 4MM3YQXN45 --issuer 69a6de83-bf58-47e3-e053-5b8c7c11a4d1
+xcrun notarytool store-credentials "WisprDuck-Notarize" --key /path/to/AuthKey_<KEY_ID>.p8 --key-id <KEY_ID> --issuer <ISSUER_UUID>
 ```
 
 Then retry. Confirm status is `Accepted`.
