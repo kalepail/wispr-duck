@@ -2,6 +2,9 @@ import SwiftUI
 
 private let duckBundleIDsKey = "duckBundleIDs3"
 private let triggerBundleIDsKey = "triggerBundleIDs3"
+private let wisprFlowHelperTriggerMigrationKey = "wisprFlowHelperTriggerMigration1"
+private let wisprFlowBundleID = "com.electron.wispr-flow"
+private let wisprFlowHelperBundleID = "com.electron.wispr-flow.accessibility-mac-app"
 
 @Observable
 final class AppSettings {
@@ -57,8 +60,8 @@ final class AppSettings {
     ]
 
     static let defaultTriggerBundleIDs: Set<String> = [
-        "com.electron.wispr-flow",
-        "com.electron.wispr-flow.accessibility-mac-app",
+        wisprFlowBundleID,
+        wisprFlowHelperBundleID,
     ]
 
     init() {
@@ -74,6 +77,7 @@ final class AppSettings {
             defaults[triggerBundleIDsKey] = json
         }
         UserDefaults.standard.register(defaults: defaults)
+        migrateWisprFlowHelperTriggerSelection()
     }
 
     // MARK: - Duck Target Bundle IDs
@@ -144,5 +148,17 @@ final class AppSettings {
            let json = String(data: data, encoding: .utf8) {
             UserDefaults.standard.set(json, forKey: key)
         }
+    }
+
+    private func migrateWisprFlowHelperTriggerSelection() {
+        guard !UserDefaults.standard.bool(forKey: wisprFlowHelperTriggerMigrationKey) else { return }
+
+        var ids = triggerBundleIDs
+        if ids.contains(wisprFlowBundleID), !ids.contains(wisprFlowHelperBundleID) {
+            ids.insert(wisprFlowHelperBundleID)
+            triggerBundleIDs = ids
+        }
+
+        UserDefaults.standard.set(true, forKey: wisprFlowHelperTriggerMigrationKey)
     }
 }
