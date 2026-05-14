@@ -122,18 +122,9 @@ final class ProcessTapManager {
 
         return objectIDs.compactMap { objectID -> AudioProcess? in
             guard let pid = pidForProcessObject(objectID), pid != myPID else { return nil }
-            let app = NSRunningApplication(processIdentifier: pid)
-            var bundleID = app?.bundleIdentifier
-            var name = app?.localizedName
-
-            // Many audio-producing processes (e.g. Chrome renderer subprocesses)
-            // have no NSRunningApplication entry. Walk up the process tree to
-            // inherit the parent app's bundle ID for grouping and selection.
-            if bundleID == nil, let ppid = parentPID(of: pid) {
-                let parentApp = NSRunningApplication(processIdentifier: ppid)
-                bundleID = parentApp?.bundleIdentifier
-                if name == nil { name = parentApp?.localizedName }
-            }
+            let identity = appIdentityForProcessOrAncestor(pid)
+            let bundleID = identity?.bundleID
+            let name = identity?.name
 
             return AudioProcess(pid: pid, objectID: objectID, bundleID: bundleID, name: name ?? "PID \(pid)")
         }

@@ -441,12 +441,15 @@ final class MicMonitor: ObservableObject {
         let objectIDs = getAudioProcessObjectIDs()
         let myPID = ProcessInfo.processInfo.processIdentifier
 
-        // Collect the resolved bundle IDs for processes currently using mic input.
+        // Collect bundle IDs for mic-using processes and their app ancestors.
+        // Wispr Flow can do input work in helper processes that do not expose
+        // their own NSRunningApplication identity.
+        var seenInputBundleIDs = Set<String>()
         var inputBundleIDs: [String] = []
         for objectID in objectIDs {
             guard let pid = pidForProcessObject(objectID), pid != myPID else { continue }
             guard isProcessRunningInput(objectID) else { continue }
-            if let bundleID = bundleIDForProcess(pid) {
+            for bundleID in appBundleIDsForProcessAncestry(pid) where seenInputBundleIDs.insert(bundleID).inserted {
                 inputBundleIDs.append(bundleID)
             }
         }
@@ -587,18 +590,6 @@ final class MicMonitor: ObservableObject {
 
         let status = AudioObjectGetPropertyData(objectID, &address, 0, nil, &size, &isRunning)
         return status == noErr && isRunning != 0
-    }
-
-    private func bundleIDForProcess(_ pid: pid_t) -> String? {
-        if let app = NSRunningApplication(processIdentifier: pid) {
-            if let bid = app.bundleIdentifier { return bid }
-        }
-        // Walk up to parent for helper processes
-        if let ppid = parentPID(of: pid),
-           let parentApp = NSRunningApplication(processIdentifier: ppid) {
-            return parentApp.bundleIdentifier
-        }
-        return nil
     }
 
     // MARK: - Device Helpers

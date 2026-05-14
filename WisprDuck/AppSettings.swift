@@ -58,6 +58,7 @@ final class AppSettings {
 
     static let defaultTriggerBundleIDs: Set<String> = [
         "com.electron.wispr-flow",
+        "com.electron.wispr-flow.accessibility-mac-app",
     ]
 
     init() {

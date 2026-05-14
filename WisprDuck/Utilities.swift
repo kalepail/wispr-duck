@@ -1,5 +1,6 @@
 import Foundation
 import CoreAudio
+import AppKit
 
 /// URL for System Settings > Privacy & Security > Screen & System Audio Recording.
 /// macOS allows audio-only access in this pane.
@@ -50,4 +51,61 @@ func parentPID(of pid: pid_t) -> pid_t? {
     }
     let ppid = info.kp_eproc.e_ppid
     return ppid > 1 ? ppid : nil
+}
+
+struct ProcessAppIdentity {
+    let pid: pid_t
+    let bundleID: String
+    let name: String?
+}
+
+/// Find the nearest app identity for a process or one of its ancestors.
+/// Electron/native-helper apps often do audio work in child processes that
+/// have no NSRunningApplication entry of their own.
+func appIdentityForProcessOrAncestor(_ pid: pid_t, maxDepth: Int = 12) -> ProcessAppIdentity? {
+    var currentPID = pid
+    var visited = Set<pid_t>()
+
+    for _ in 0..<maxDepth {
+        guard visited.insert(currentPID).inserted else { break }
+
+        if let app = NSRunningApplication(processIdentifier: currentPID),
+           let bundleID = app.bundleIdentifier {
+            return ProcessAppIdentity(
+                pid: currentPID,
+                bundleID: bundleID,
+                name: app.localizedName
+            )
+        }
+
+        guard let parent = parentPID(of: currentPID) else { break }
+        currentPID = parent
+    }
+
+    return nil
+}
+
+/// Return all app bundle IDs visible on a process's ancestry path.
+/// This is intentionally broader than appIdentityForProcessOrAncestor so
+/// trigger matching can survive nested helpers with distinct bundle IDs.
+func appBundleIDsForProcessAncestry(_ pid: pid_t, maxDepth: Int = 12) -> [String] {
+    var currentPID = pid
+    var visitedPIDs = Set<pid_t>()
+    var seenBundleIDs = Set<String>()
+    var bundleIDs: [String] = []
+
+    for _ in 0..<maxDepth {
+        guard visitedPIDs.insert(currentPID).inserted else { break }
+
+        if let app = NSRunningApplication(processIdentifier: currentPID),
+           let bundleID = app.bundleIdentifier,
+           seenBundleIDs.insert(bundleID).inserted {
+            bundleIDs.append(bundleID)
+        }
+
+        guard let parent = parentPID(of: currentPID) else { break }
+        currentPID = parent
+    }
+
+    return bundleIDs
 }

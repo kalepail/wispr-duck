@@ -100,12 +100,15 @@ final class DuckController: ObservableObject {
         guard settings.isEnabled else { return }
 
         if shouldDuck {
+            startTriggerReevaluationTimer()
             if !isDucked {
                 duck()
             }
         } else {
             if isDucked {
                 restore()
+            } else {
+                stopTriggerReevaluationTimer()
             }
         }
     }
@@ -160,7 +163,7 @@ final class DuckController: ObservableObject {
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now() + 0.25, repeating: 0.5)
         timer.setEventHandler { [weak self] in
-            self?.micMonitor.refreshTriggerState()
+            self?.refreshWhileTriggered()
         }
         triggerReevaluationTimer = timer
         timer.resume()
@@ -169,5 +172,22 @@ final class DuckController: ObservableObject {
     private func stopTriggerReevaluationTimer() {
         triggerReevaluationTimer?.cancel()
         triggerReevaluationTimer = nil
+    }
+
+    private func refreshWhileTriggered() {
+        micMonitor.refreshTriggerState()
+
+        guard settings.isEnabled, micMonitor.shouldTriggerDuck else { return }
+
+        let hasTaps = tapManager.reconcileActiveTaps(
+            bundleIDs: settings.enabledBundleIDs,
+            duckAll: settings.duckAllApps,
+            duckLevel: Float(settings.duckLevel) / 100.0
+        )
+
+        if hasTaps {
+            isDucked = true
+            audioStatusMessage = nil
+        }
     }
 }
