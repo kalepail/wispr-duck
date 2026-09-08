@@ -19,7 +19,7 @@
 
 ## What is WisprDuck?
 
-WisprDuck sits in your menu bar and watches for microphone activity. When a selected app starts using the mic — voice-to-text tools like [Wispr Flow](https://wispr.com), video calls, screen recordings — WisprDuck automatically lowers the volume of other apps so your voice comes through clearly. When the mic goes idle, volume smoothly fades back up.
+WisprDuck sits in your menu bar and watches for microphone activity. When a selected app starts using the mic — voice-to-text tools like [Wispr Flow](https://wispr.com), video calls, screen recordings — WisprDuck smoothly lowers the volume of other apps so your voice comes through clearly. When the mic goes idle, volume smoothly fades back up.
 
 No manual toggling. No keyboard shortcuts. Just works.
 
@@ -28,9 +28,9 @@ No manual toggling. No keyboard shortcuts. Just works.
 - **Per-app mic triggers** — choose which apps trigger ducking (e.g., only Wispr Flow) or duck on any mic use
 - **Per-app duck targets** — duck all audio or pick specific apps (Spotify, Chrome, Arc, etc.)
 - **Smart defaults** — Wispr Flow pre-selected as trigger, 20+ common audio apps pre-selected as duck targets
-- **Smooth linear fade** — 1-second constant-rate volume transitions, no harsh jumps
+- **Smooth linear fade** — the same constant-rate gain ramp on activation and release
 - **Crash-safe** — uses `mutedWhenTapped` so audio auto-restores if WisprDuck quits unexpectedly
-- **Lightweight** — event-driven Core Audio listeners, no polling, minimal CPU usage
+- **Event-driven monitoring** — Core Audio listeners track microphone and audio-process changes
 - **Smart grouping** — Chrome helpers, Slack workers, etc. automatically group under their parent app
 
 ## Installation
@@ -47,13 +47,14 @@ No manual toggling. No keyboard shortcuts. Just works.
 
 ## How It Works
 
-WisprDuck uses [Core Audio process taps](https://developer.apple.com/documentation/coreaudio) (macOS 14.2+) to intercept audio at the system level. When a trigger app activates the mic:
+WisprDuck uses [Core Audio process taps](https://developer.apple.com/documentation/coreaudio) to intercept audio at the system level.
 
-1. **Detect** — Per-process Core Audio listeners detect which app is using the mic input
-2. **Match** — The active mic app is checked against your trigger list (or triggers on any mic use)
-3. **Tap** — Process taps are created for target apps, muting their original audio at the system mixer
-4. **Scale** — The intercepted audio is scaled by the duck level and played through an aggregate device
-5. **Restore** — When the mic goes idle, volume linearly ramps back to 100% over ~1 second, then taps are destroyed
+1. **Prepare** — While monitoring is enabled, selected apps have audio taps running at normal volume.
+2. **Detect** — Per-process Core Audio listeners detect microphone activity and match it against your trigger list.
+3. **Duck** — Existing taps ramp toward the duck level without rebuilding the audio path.
+4. **Restore** — When the mic goes idle, the same ramp brings volume back to 100%. Taps stay ready for the next dictation.
+
+Keeping selected taps active avoids repeated setup at the start of dictation, but continues processing their audio while the microphone is idle. Select only the apps you want to duck to limit this work. Disabling monitoring or quitting releases the taps; changing output devices rebuilds them on the new output.
 
 The `mutedWhenTapped` behavior is the safety net: if WisprDuck crashes or is force-quit, macOS automatically unmutes all tapped processes. Audio is never permanently stuck at a low volume.
 
@@ -90,7 +91,9 @@ For command-line verification:
 ./scripts/verify.sh
 ```
 
-That validates plist/project files, builds the native app in Debug and Release with signing disabled, and runs the site lint/build checks.
+That validates plist/project files, builds the native app in Debug and Release with signing disabled, runs audio lifecycle regression tests without microphone/audio permissions, and runs the site lint/build checks.
+
+To run only the audio lifecycle tests: `./scripts/test-audio.sh`.
 
 ## Release Builds
 

@@ -51,10 +51,7 @@ struct MenuBarView: View {
                 Slider(
                     value: Binding(
                         get: { Double(settings.duckLevel) },
-                        set: {
-                            settings.duckLevel = Int($0)
-                            duckController.updateDuckLevel(Int($0))
-                        }
+                        set: { settings.duckLevel = Int($0) }
                     ),
                     in: 0...100,
                     step: 5

@@ -31,17 +31,15 @@ struct AudioApp: Identifiable, Hashable {
 
 /// Manages per-process audio taps for volume ducking.
 /// Enumerates audio-producing processes, creates/destroys ProcessTap instances,
-/// and monitors for new audio processes appearing while ducked.
+/// and keeps selected paths ready while monitoring is enabled.
 final class ProcessTapManager {
     private var activeTaps: [pid_t: ProcessTap] = [:]
     private var processListListenerBlock: AudioObjectPropertyListenerBlock?
     private let listenerQueue = DispatchQueue(label: "com.wisprduck.processmonitor", qos: .userInitiated)
-    private var isDucking = false
+    private var isMonitoring = false
     private var currentDuckLevel: Float = 1.0
     private var currentBundleIDs: Set<String> = []
     private var duckAllMode = false
-    private var fadeOutTimer: DispatchWorkItem?
-    private var fadeOutGeneration = 0
     private var onProcessListChanged: (([AudioProcess]) -> Void)?
     private var onError: ((String) -> Void)?
     private var outputDeviceListenerBlock: AudioObjectPropertyListenerBlock?
@@ -175,64 +173,26 @@ final class ProcessTapManager {
 
     // MARK: - Duck / Restore
 
-    /// Duck audio for processes matching the given bundle IDs.
-    /// If bundleIDs is empty and duckAll is true, ducks all audio processes.
-    /// If called during a fade-out, cancels the fade and reuses existing taps.
+    /// Keep selected audio paths running at the requested gain, including unity
+    /// between dictations.
     @discardableResult
-    func duck(bundleIDs: Set<String>, duckAll: Bool, duckLevel: Float) -> Bool {
-        // Cancel any pending fade-out destruction
-        fadeOutTimer?.cancel()
-        fadeOutTimer = nil
-        fadeOutGeneration += 1
-
-        guard let outputUID = getDefaultOutputDeviceUID() else {
-            reportError("WisprDuck could not read the current output device. Check macOS audio output and permissions.")
-            return false
-        }
-
-        isDucking = true
-        currentDuckLevel = duckLevel
+    func reconcileActiveTaps(bundleIDs: Set<String>, duckAll: Bool, duckLevel: Float) -> Bool {
+        isMonitoring = true
         currentBundleIDs = bundleIDs
+        currentDuckLevel = duckLevel
         duckAllMode = duckAll
         startOutputDeviceMonitoring()
 
-        return reconcileActiveTaps(
-            bundleIDs: bundleIDs,
-            duckAll: duckAll,
-            duckLevel: duckLevel,
-            outputDeviceUID: outputUID
-        )
-    }
-
-    /// Reconcile active taps with the current settings while ducking is already active.
-    @discardableResult
-    func reconcileActiveTaps(bundleIDs: Set<String>, duckAll: Bool, duckLevel: Float) -> Bool {
         guard let outputUID = getDefaultOutputDeviceUID() else {
             reportError("WisprDuck could not read the current output device. Check macOS audio output and permissions.")
             return false
         }
 
-        isDucking = true
-        currentBundleIDs = bundleIDs
-        currentDuckLevel = duckLevel
-        duckAllMode = duckAll
-
-        return reconcileActiveTaps(
-            bundleIDs: bundleIDs,
-            duckAll: duckAll,
-            duckLevel: duckLevel,
-            outputDeviceUID: outputUID
-        )
+        return reconcileActiveTaps(processes: enumerateAudioProcesses(), outputDeviceUID: outputUID)
     }
 
     @discardableResult
-    private func reconcileActiveTaps(
-        bundleIDs: Set<String>,
-        duckAll: Bool,
-        duckLevel: Float,
-        outputDeviceUID: String
-    ) -> Bool {
-        let processes = enumerateAudioProcesses()
+    private func reconcileActiveTaps(processes: [AudioProcess], outputDeviceUID: String) -> Bool {
         let processesByPID = Dictionary(processes.map { ($0.pid, $0) }, uniquingKeysWith: { first, _ in first })
 
         for pid in Array(activeTaps.keys) {
@@ -243,9 +203,9 @@ final class ProcessTapManager {
                 continue
             }
 
-            let shouldDuck = duckAll || processMatchesSelection(process, selectedBundleIDs: bundleIDs)
+            let shouldDuck = duckAllMode || processMatchesSelection(process, selectedBundleIDs: currentBundleIDs)
             if shouldDuck {
-                tap.updateDuckLevel(duckLevel)
+                tap.updateDuckLevel(currentDuckLevel)
             } else {
                 tap.stop()
                 activeTaps.removeValue(forKey: pid)
@@ -254,8 +214,8 @@ final class ProcessTapManager {
 
         let toDuck = processes.filter { process in
             guard activeTaps[process.pid] == nil else { return false }
-            if duckAll { return true }
-            return processMatchesSelection(process, selectedBundleIDs: bundleIDs)
+            if duckAllMode { return true }
+            return processMatchesSelection(process, selectedBundleIDs: currentBundleIDs)
         }
 
         for process in toDuck {
@@ -263,7 +223,7 @@ final class ProcessTapManager {
                 processObjectID: process.objectID,
                 pid: process.pid
             )
-            if tap.start(outputDeviceUID: outputDeviceUID, duckLevel: duckLevel) {
+            if tap.start(outputDeviceUID: outputDeviceUID, duckLevel: currentDuckLevel) {
                 activeTaps[process.pid] = tap
             } else {
                 reportError(
@@ -279,10 +239,7 @@ final class ProcessTapManager {
     /// Restore all ducked processes immediately. Used for app quit where
     /// we can't wait for a fade.
     func restoreAll() {
-        isDucking = false
-        fadeOutTimer?.cancel()
-        fadeOutTimer = nil
-        fadeOutGeneration += 1
+        isMonitoring = false
 
         for tap in activeTaps.values {
             tap.stop()
@@ -291,61 +248,10 @@ final class ProcessTapManager {
         stopOutputDeviceMonitoring()
     }
 
-    /// Smoothly restore audio by ramping volume back to 1.0 before destroying taps.
-    /// Taps stay in activeTaps during the fade so duck() can cancel and reuse them.
-    /// Timer fires just before the ramp completes so the tap destruction pop lands at 100%.
-    func restoreAllWithFade() {
-        isDucking = false
-        fadeOutGeneration += 1
-        let generation = fadeOutGeneration
-
-        guard !activeTaps.isEmpty else {
-            fadeOutTimer?.cancel()
-            fadeOutTimer = nil
-            stopOutputDeviceMonitoring()
-            return
-        }
-
-        // Calculate how long the ramp will actually take based on current duck level.
-        // The linear ramp in ProcessTap sweeps 0→1 in 1s, so a partial sweep from
-        // currentDuckLevel→1.0 takes (1 - currentDuckLevel) * 1.0 seconds.
-        // Wait for the ramp to finish before tearing down taps, with a small scheduling cushion.
-        let rampDuration: Double = 1.0
-        let estimatedFadeTime = max(0.05, Double(1.0 - currentDuckLevel) * rampDuration + 0.05)
-
-        // Ramp all taps toward full volume
-        for tap in activeTaps.values {
-            tap.updateDuckLevel(1.0)
-        }
-
-        // Schedule tap destruction just after the linear ramp completes.
-        // If duck() is called before this fires, it cancels the timer and reuses the taps.
-        let workItem = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            guard !self.isDucking, self.fadeOutGeneration == generation else { return }
-            for tap in self.activeTaps.values {
-                tap.stop()
-            }
-            self.activeTaps.removeAll()
-            self.fadeOutTimer = nil
-            self.stopOutputDeviceMonitoring()
-        }
-        fadeOutTimer = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + estimatedFadeTime, execute: workItem)
-    }
-
-    /// Update duck level for all active taps.
-    func updateDuckLevel(_ level: Float) {
-        currentDuckLevel = level
-        for tap in activeTaps.values {
-            tap.updateDuckLevel(level)
-        }
-    }
-
     // MARK: - Process List Monitoring
 
     /// Start monitoring the audio process list. Always-on for UI updates;
-    /// also creates/removes taps dynamically while ducking is active.
+    /// also maintains selected taps while monitoring is enabled.
     func startProcessListMonitoring() {
         guard processListListenerBlock == nil else { return }
 
@@ -448,55 +354,24 @@ final class ProcessTapManager {
     }
 
     private func handleOutputDeviceChanged() {
-        guard isDucking else { return }
-        let bundleIDs = currentBundleIDs
-        let duckAll = duckAllMode
-        let level = currentDuckLevel
+        guard isMonitoring else { return }
         restoreAll()
-        _ = duck(bundleIDs: bundleIDs, duckAll: duckAll, duckLevel: level)
+        _ = reconcileActiveTaps(bundleIDs: currentBundleIDs, duckAll: duckAllMode, duckLevel: currentDuckLevel)
     }
 
     private func handleProcessListChanged(with processes: [AudioProcess]) {
         // Always notify UI so the app list stays current
         onProcessListChanged?(processes)
 
-        // Only manage taps while actively ducking
-        guard isDucking else { return }
+        // Keep selected paths ready even while the microphone is idle.
+        guard isMonitoring else { return }
 
         guard let outputUID = getDefaultOutputDeviceUID() else {
             reportError("WisprDuck could not read the current output device. Check macOS audio output and permissions.")
             return
         }
 
-        // Create taps for new matching processes
-        let toDuck = processes.filter { process in
-            guard activeTaps[process.pid] == nil else { return false }
-            if duckAllMode { return true }
-            return processMatchesSelection(process, selectedBundleIDs: currentBundleIDs)
-        }
-
-        for process in toDuck {
-            let tap = ProcessTap(
-                processObjectID: process.objectID,
-                pid: process.pid
-            )
-            if tap.start(outputDeviceUID: outputUID, duckLevel: currentDuckLevel) {
-                activeTaps[process.pid] = tap
-            } else {
-                reportError(
-                    tap.lastError
-                    ?? "WisprDuck could not start system audio capture. Grant Screen & System Audio Recording permission."
-                )
-            }
-        }
-
-        // Clean up taps for processes that have stopped producing audio
-        let activePIDs = Set(processes.map(\.pid))
-        let stalePIDs = activeTaps.keys.filter { !activePIDs.contains($0) }
-        for pid in stalePIDs {
-            activeTaps[pid]?.stop()
-            activeTaps.removeValue(forKey: pid)
-        }
+        _ = reconcileActiveTaps(processes: processes, outputDeviceUID: outputUID)
     }
 
     /// Set a callback for when the process list changes (for UI updates).
