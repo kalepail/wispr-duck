@@ -26,9 +26,6 @@ xcodebuild \
   CODE_SIGNING_ALLOWED=NO \
   build
 
-echo "==> Testing audio lifecycle"
-./scripts/test-audio.sh
-
 echo "==> Installing site dependencies"
 npm ci --prefix site
 

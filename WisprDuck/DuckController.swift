@@ -53,8 +53,8 @@ final class DuckController: ObservableObject {
         // React to filtered trigger signal instead of raw mic state
         micMonitor.$shouldTriggerDuck
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.refreshAudioPaths()
+            .sink { [weak self] shouldDuck in
+                self?.handleTriggerStateChange(shouldDuck: shouldDuck)
             }
             .store(in: &cancellables)
 
@@ -71,29 +71,22 @@ final class DuckController: ObservableObject {
                     return
                 }
 
-                self.refreshAudioPaths()
+                if self.isDucked {
+                    if self.micMonitor.shouldTriggerDuck {
+                        self.isDucked = self.tapManager.reconcileActiveTaps(
+                            bundleIDs: self.settings.enabledBundleIDs,
+                            duckAll: self.settings.duckAllApps,
+                            duckLevel: Float(self.settings.duckLevel) / 100.0
+                        )
+                    } else {
+                        self.restore()
+                    }
+                } else {
+                    self.restore()
+                }
                 self.micMonitor.refreshTriggerState()
             }
         }
-        refreshAudioPaths()
-    }
-
-    /// Keep selected paths at unity while idle; only mic activity lowers gain.
-    private func refreshAudioPaths() {
-        guard settings.isEnabled else { return }
-        let shouldDuck = micMonitor.shouldTriggerDuck
-        if shouldDuck {
-            startTriggerReevaluationTimer()
-        } else {
-            stopTriggerReevaluationTimer()
-        }
-        let hasTaps = tapManager.reconcileActiveTaps(
-            bundleIDs: settings.enabledBundleIDs,
-            duckAll: settings.duckAllApps,
-            duckLevel: shouldDuck ? Float(settings.duckLevel) / 100.0 : 1.0
-        )
-        isDucked = shouldDuck && hasTaps
-        if hasTaps { audioStatusMessage = nil }
     }
 
     // MARK: - Settings Sync
@@ -103,8 +96,59 @@ final class DuckController: ObservableObject {
         micMonitor.triggerBundleIDs = settings.triggerBundleIDs
     }
 
+    // MARK: - Trigger State Handling
+
+    private func handleTriggerStateChange(shouldDuck: Bool) {
+        guard settings.isEnabled else { return }
+
+        if shouldDuck {
+            startTriggerReevaluationTimer()
+            if !isDucked {
+                duck()
+            }
+        } else {
+            restore()
+        }
+    }
+
+    private func duck() {
+        let duckLevel = Float(settings.duckLevel) / 100.0
+        let selectedBundleIDs = settings.enabledBundleIDs
+        let duckAll = settings.duckAllApps
+
+        isDucked = tapManager.duck(
+            bundleIDs: selectedBundleIDs,
+            duckAll: duckAll,
+            duckLevel: duckLevel
+        )
+
+        if isDucked {
+            audioStatusMessage = nil
+            startTriggerReevaluationTimer()
+        } else if audioStatusMessage == nil {
+            audioStatusMessage = "WisprDuck could not start system audio capture. Grant Screen & System Audio Recording permission."
+        }
+    }
+
+    private func restore() {
+        stopTriggerReevaluationTimer()
+        // Keep taps ready at full volume so the next dictation uses the existing fade.
+        tapManager.duck(
+            bundleIDs: settings.enabledBundleIDs,
+            duckAll: settings.duckAllApps,
+            duckLevel: 1.0
+        )
+        isDucked = false
+    }
+
+    /// Update duck level on active taps when the slider changes.
+    func updateDuckLevel(_ level: Int) {
+        guard isDucked else { return }
+        tapManager.updateDuckLevel(Float(level) / 100.0)
+    }
+
     func restoreAndStop() {
-        // Disabling monitoring and quitting release the idle paths too.
+        // Always clean up — taps stay alive even when isDucked is false
         stopTriggerReevaluationTimer()
         tapManager.restoreAll()
         isDucked = false
@@ -139,6 +183,15 @@ final class DuckController: ObservableObject {
 
         guard settings.isEnabled, micMonitor.shouldTriggerDuck else { return }
 
-        refreshAudioPaths()
+        let hasTaps = tapManager.reconcileActiveTaps(
+            bundleIDs: settings.enabledBundleIDs,
+            duckAll: settings.duckAllApps,
+            duckLevel: Float(settings.duckLevel) / 100.0
+        )
+
+        if hasTaps {
+            isDucked = true
+            audioStatusMessage = nil
+        }
     }
 }
