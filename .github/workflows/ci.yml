@@ -41,6 +41,9 @@ jobs:
       - name: Build mic probe
         run: DERIVED_DATA_PATH=DerivedData/CI ./scripts/mic-probe.sh --help
 
+      - name: Build duck-check tools
+        run: DERIVED_DATA_PATH=DerivedData/CI ./scripts/duck-check.sh --build-only
+
       - name: Build native release
         run: |
           xcodebuild \

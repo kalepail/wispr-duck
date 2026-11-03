@@ -124,7 +124,7 @@ For command-line verification:
 ./scripts/verify.sh
 ```
 
-That validates plist/project files, runs the unit tests, builds the mic probe, builds the native app in Debug and Release with signing disabled, and runs the site lint/build checks.
+That validates plist/project files, runs the unit tests, builds the mic probe and the duck-check tools, builds the native app in Debug and Release with signing disabled, and runs the site lint/build checks.
 
 To run only the unit tests:
 
@@ -133,6 +133,22 @@ xcodebuild -project WisprDuck.xcodeproj -scheme WisprDuck CODE_SIGNING_ALLOWED=N
 ```
 
 The `WisprDuckTests` bundle compiles the app's non-UI sources directly and replaces Core Audio with fakes, so it does not launch the app, touch your audio, or read your saved settings. It covers trigger matching (including Granola and Wispr Flow helpers), the gain ramp, settings and migrations, tap lifecycle, and the duck/restore state machine.
+
+To check ducking on real audio hardware:
+
+```bash
+./scripts/duck-check.sh
+```
+
+The check builds WisprDuck (Release) from your checkout. It plays a 440 Hz test tone at -70 dBFS, which is nearly inaudible, and opens the mic for 4 s from a small test app. A level meter then measures what WisprDuck outputs:
+
+| Phase | Pass condition |
+| --- | --- |
+| Before the mic opens | WisprDuck does not duck |
+| While the mic is open | The tone plays within 2 dB of the duck level (10% = -20 dB) |
+| After the mic closes | The tone ramps back to full in 2 s or less, then the taps are removed |
+
+The script saves your WisprDuck settings and restores them on exit. If WisprDuck is running, the script quits it and starts it again at the end. On the first run, macOS asks for two permissions: System Audio Recording for "WisprDuck Test Harness" and Microphone for "WisprDuck Test Mic". The test apps are signed with your Apple Development identity, so the permissions stay after a rebuild. Use `--app PATH` to test a different build, and `--duck-level N` to test a different level.
 
 To see WisprDuck's duck and restore decisions live:
 

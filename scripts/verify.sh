@@ -29,6 +29,9 @@ xcodebuild \
 echo "==> Building mic probe"
 DERIVED_DATA_PATH="$DERIVED_DATA_PATH" "$ROOT_DIR/scripts/mic-probe.sh" --help >/dev/null
 
+echo "==> Building duck-check tools"
+DERIVED_DATA_PATH="$DERIVED_DATA_PATH" "$ROOT_DIR/scripts/duck-check.sh" --build-only
+
 echo "==> Building native app (Release)"
 xcodebuild \
   -project WisprDuck.xcodeproj \
