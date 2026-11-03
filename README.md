@@ -23,6 +23,10 @@ WisprDuck sits in your menu bar and watches for microphone activity. When a sele
 
 No manual toggling. No keyboard shortcuts. Just works.
 
+<p align="center">
+  <img src="site/public/menu-bar.webp" width="280" alt="The WisprDuck menu bar panel: Monitoring status, a Duck Level slider at 10%, a trigger app list, and a duck app list">
+</p>
+
 ## Features
 
 - **Per-app mic triggers** — choose which apps trigger ducking (e.g., only Wispr Flow) or duck on any mic use

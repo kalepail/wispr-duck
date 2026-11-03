@@ -157,6 +157,10 @@ p, dd {
   text-shadow: 0 0 10px rgba(251, 146, 60, 0.6), 0 0 30px rgba(251, 146, 60, 0.3);
 }
 
+.text-glow-blue {
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.6), 0 0 30px rgba(56, 189, 248, 0.3);
+}
+
 /* Disable animations when user prefers reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *,

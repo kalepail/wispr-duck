@@ -326,9 +326,52 @@ function HowItWorks() {
   )
 }
 
+function MenuBarPanel() {
+  const controls = [
+    { label: 'STATUS', desc: 'The dot shows Monitoring, Ducked, or Disabled. Turn monitoring off at any time.', color: 'text-pixel-green', border: 'border-pixel-green/40' },
+    { label: 'DUCK LEVEL', desc: 'Drag the slider to set how loud other apps stay while you talk. The default is 10%.', color: 'text-pixel-orange', border: 'border-pixel-orange/40' },
+    { label: 'TRIGGER APPS', desc: 'Pick the apps that start a duck when they use your mic. Or let any app count.', color: 'text-pixel-blue', border: 'border-pixel-blue/40' },
+    { label: 'DUCK APPS', desc: 'Pick the apps that get quieter. Or duck every app that plays audio.', color: 'text-pixel-yellow', border: 'border-pixel-yellow/40' },
+  ]
+
+  return (
+    <section id="menu-bar" className="relative py-20 sm:py-28 px-5 sm:px-6 scroll-mt-16 bg-hunter-dark" aria-labelledby="menu-bar-heading">
+      <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-[minmax(0,34rem)_auto] lg:justify-center gap-12 lg:gap-24 items-center">
+        <div>
+          <h2 id="menu-bar-heading" className="font-pixel text-lg sm:text-2xl text-pixel-blue text-glow-blue mb-4 leading-relaxed">IN YOUR MENU BAR</h2>
+          <p className="text-ink-2 max-w-xl mb-10">
+            Click the duck foot in your menu bar. One small panel holds every setting.
+          </p>
+          <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-x-8 gap-y-7 m-0 max-w-xl">
+            {controls.map(control => (
+              <div key={control.label} className={`border-l-4 pl-4 ${control.border}`}>
+                <dt className={`font-pixel text-xs tracking-wider mb-2 ${control.color}`}>{control.label}</dt>
+                <dd className="text-ink-2 text-sm leading-relaxed m-0">{control.desc}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+
+        <figure className="m-0 justify-self-center">
+          <img
+            src="/menu-bar.webp"
+            alt="The WisprDuck menu bar panel in dark mode. It shows the Monitoring status, a Duck Level slider at 10%, Granola as a trigger app, and Google Chrome and Spotify as duck apps."
+            width="280"
+            height="673"
+            className="block w-[280px] max-w-full h-auto drop-shadow-[0_24px_48px_rgba(0,0,0,0.55)]"
+            loading="lazy"
+            decoding="async"
+          />
+          <figcaption className="text-xs text-ink-3 text-center mt-5">WisprDuck {VERSION} on macOS, actual size</figcaption>
+        </figure>
+      </div>
+    </section>
+  )
+}
+
 function Features() {
   return (
-    <section id="features" className="relative py-20 sm:py-28 px-5 sm:px-6 scroll-mt-16 bg-hunter-dark" aria-labelledby="features-heading">
+    <section id="features" className="relative py-20 sm:py-28 px-5 sm:px-6 scroll-mt-16 bg-hunter-bg" aria-labelledby="features-heading">
       <CrosshairDecor />
       <div className="relative z-10 max-w-6xl mx-auto">
         <div className="text-center mb-12 sm:mb-16">
@@ -364,7 +407,7 @@ function ScoreBoard() {
   ]
 
   return (
-    <section className="py-16 sm:py-20 px-5 sm:px-6 bg-hunter-bg border-y-2 border-hunter-border" aria-labelledby="scores-heading">
+    <section className="py-16 sm:py-20 px-5 sm:px-6 bg-hunter-dark border-y-2 border-hunter-border" aria-labelledby="scores-heading">
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-10">
           <h2 id="scores-heading" className="font-pixel text-base sm:text-lg text-pixel-yellow tracking-wider">HIGH SCORES</h2>
@@ -457,6 +500,7 @@ function App() {
       <main id="main">
         <Hero />
         <HowItWorks />
+        <MenuBarPanel />
         <Features />
         <ScoreBoard />
         <Download />
