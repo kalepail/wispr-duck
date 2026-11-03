@@ -49,17 +49,6 @@ func processObjectIDs() -> [AudioObjectID] {
     return ids
 }
 
-func isRunningInput(_ objectID: AudioObjectID) -> Bool {
-    var address = AudioObjectPropertyAddress(
-        mSelector: kAudioProcessPropertyIsRunningInput,
-        mScope: kAudioObjectPropertyScopeGlobal,
-        mElement: kAudioObjectPropertyElementMain
-    )
-    var running: UInt32 = 0
-    var size = UInt32(MemoryLayout<UInt32>.size)
-    return AudioObjectGetPropertyData(objectID, &address, 0, nil, &size, &running) == noErr && running != 0
-}
-
 func executableName(_ pid: pid_t) -> String {
     var buffer = [CChar](repeating: 0, count: 4096)
     guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return "?" }
@@ -97,7 +86,7 @@ while Date() < deadline {
     var inputProcessCount = 0
 
     for objectID in processObjectIDs() {
-        guard let pid = pidForProcessObject(objectID), pid != myPID, isRunningInput(objectID) else { continue }
+        guard let pid = pidForProcessObject(objectID), pid != myPID, isProcessUsingMic(objectID) else { continue }
         inputProcessCount += 1
         let ancestry = appBundleIDsForProcessAncestry(pid)
         for id in ancestry where seen.insert(id).inserted { inputBundleIDs.append(id) }

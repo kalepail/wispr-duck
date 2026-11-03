@@ -20,6 +20,9 @@
 #   --app PATH       WisprDuck.app to test. Default: build Release from this checkout.
 #   --duck-level N   Duck level percent, 1-100 (default 10).
 #   --tone-db N      Test tone RMS level in dBFS (default -70, nearly inaudible).
+#   --trigger-all    Use Trigger All Apps instead of the test mic as the one
+#                    trigger app. The level meter reads process taps, so this
+#                    also checks that tap readers do not count as mic users.
 #   --build-only     Build the test tools and exit. Plays no audio.
 set -euo pipefail
 
@@ -33,6 +36,7 @@ HARNESS_BUNDLE_ID="com.wisprduck.testharness"
 
 APP_PATH=""
 BUILD_ONLY=0
+TRIGGER_ALL=0
 DUCK_LEVEL=10
 TONE_DB=-70
 BASELINE_SECONDS=2.5
@@ -45,6 +49,7 @@ while [[ $# -gt 0 ]]; do
     --duck-level) DUCK_LEVEL="$2"; shift 2 ;;
     --tone-db) TONE_DB="$2"; shift 2 ;;
     --build-only) BUILD_ONLY=1; shift ;;
+    --trigger-all) TRIGGER_ALL=1; shift ;;
     -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -164,10 +169,12 @@ defaults write "$DOMAIN" isEnabled -bool true
 defaults write "$DOMAIN" duckLevel -int "$DUCK_LEVEL"
 defaults write "$DOMAIN" duckAllApps -bool false
 defaults write "$DOMAIN" duckBundleIDs3 -string "[\"$TONE_BUNDLE_ID\"]"
-# Trigger on the test mic app only. Trigger-all mode would also see the level
-# meter: Core Audio reports any process that reads a process tap as running input.
-defaults write "$DOMAIN" triggerAllApps2 -bool false
 defaults write "$DOMAIN" triggerBundleIDs3 -string "[\"$MIC_BUNDLE_ID\"]"
+if [[ "$TRIGGER_ALL" == 1 ]]; then
+  defaults write "$DOMAIN" triggerAllApps2 -bool true
+else
+  defaults write "$DOMAIN" triggerAllApps2 -bool false
+fi
 defaults write "$DOMAIN" hasCompletedOnboarding -bool true
 defaults write "$DOMAIN" wisprFlowHelperTriggerMigration1 -bool true
 
@@ -180,7 +187,7 @@ echo "==> Playing the test tone at $TONE_DB dBFS" >&2
 open -g -n "$TONE_APP" --stdout "$RUN_DIR/tone.log" --stderr "$RUN_DIR/tone.log" \
   --args "$TOTAL_SECONDS" "$TONE_DB"
 
-echo "==> Starting WisprDuck at duck level $DUCK_LEVEL%" >&2
+echo "==> Starting WisprDuck at duck level $DUCK_LEVEL%$([[ "$TRIGGER_ALL" == 1 ]] && echo ", Trigger All Apps")" >&2
 # Launch through Launch Services, so macOS checks WisprDuck's own permissions
 # and not the terminal's.
 open -g -n "$APP_PATH" --stdout "$RUN_DIR/wisprduck.log" --stderr "$RUN_DIR/wisprduck.log"

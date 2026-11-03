@@ -239,45 +239,49 @@ final class MicMonitor: ObservableObject {
         }
     }
 
-    private func addPerProcessListener(_ objectID: AudioObjectID) {
-        var address = AudioObjectPropertyAddress(
+    /// Per-process properties that change whether a process uses the mic.
+    /// The input device list changes when an app starts or stops reading a
+    /// real mic without "running input" changing (e.g. a tap reader that
+    /// also opens the mic).
+    private static let perProcessAddresses = [
+        AudioObjectPropertyAddress(
             mSelector: kAudioProcessPropertyIsRunningInput,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
-        )
+        ),
+        AudioObjectPropertyAddress(
+            mSelector: kAudioProcessPropertyDevices,
+            mScope: kAudioObjectPropertyScopeInput,
+            mElement: kAudioObjectPropertyElementMain
+        ),
+    ]
 
+    private func addPerProcessListener(_ objectID: AudioObjectID) {
         let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
             self?.reevaluateTriggerState()
         }
 
-        let status = AudioObjectAddPropertyListenerBlock(
-            objectID,
-            &address,
-            listenerQueue,
-            block
-        )
-
-        if status == noErr {
-            perProcessListenerBlocks[objectID] = block
-            clearIssue()
-        } else {
+        var addresses = Self.perProcessAddresses
+        let status = AudioObjectAddPropertyListenerBlock(objectID, &addresses[0], listenerQueue, block)
+        guard status == noErr else {
             reportIssue("WisprDuck could not monitor an app's microphone activity: \(describeOSStatus(status))")
+            return
         }
+        // The device-list listener is a hint only; "running input" stays the main signal.
+        let deviceStatus = AudioObjectAddPropertyListenerBlock(objectID, &addresses[1], listenerQueue, block)
+        if deviceStatus != noErr {
+            logger.debug("Could not monitor input devices for process \(objectID): \(describeOSStatus(deviceStatus))")
+        }
+        perProcessListenerBlocks[objectID] = block
+        clearIssue()
     }
 
     private func removePerProcessListener(_ objectID: AudioObjectID) {
         guard let block = perProcessListenerBlocks.removeValue(forKey: objectID) else { return }
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioProcessPropertyIsRunningInput,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        let status = AudioObjectRemovePropertyListenerBlock(
-            objectID,
-            &address,
-            listenerQueue,
-            block
-        )
+        var addresses = Self.perProcessAddresses
+        let status = AudioObjectRemovePropertyListenerBlock(objectID, &addresses[0], listenerQueue, block)
+        // Fails harmlessly when the device-list listener was never added.
+        _ = AudioObjectRemovePropertyListenerBlock(objectID, &addresses[1], listenerQueue, block)
         if status != noErr {
             // Expected when the process has exited: its audio object is already gone.
             logger.debug("Could not stop monitoring app microphone activity \(objectID): \(describeOSStatus(status))")
@@ -333,7 +337,7 @@ final class MicMonitor: ObservableObject {
         var inputProcessCount = 0
         for objectID in objectIDs {
             guard let pid = pidForProcessObject(objectID), pid != myPID else { continue }
-            guard isProcessRunningInput(objectID) else { continue }
+            guard isProcessUsingMic(objectID) else { continue }
             inputProcessCount += 1
             for bundleID in appBundleIDsForProcessAncestry(pid) where seenInputBundleIDs.insert(bundleID).inserted {
                 inputBundleIDs.append(bundleID)
@@ -383,19 +387,6 @@ final class MicMonitor: ObservableObject {
         )
         guard status == noErr else { return [] }
         return objectIDs
-    }
-
-    private func isProcessRunningInput(_ objectID: AudioObjectID) -> Bool {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioProcessPropertyIsRunningInput,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var isRunning: UInt32 = 0
-        var size = UInt32(MemoryLayout<UInt32>.size)
-
-        let status = AudioObjectGetPropertyData(objectID, &address, 0, nil, &size, &isRunning)
-        return status == noErr && isRunning != 0
     }
 
     // MARK: - Device Helpers

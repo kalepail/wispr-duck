@@ -41,6 +41,42 @@ func pidForProcessObject(_ objectID: AudioObjectID) -> pid_t? {
     return pid
 }
 
+/// Input devices that Core Audio says a process uses
+/// (kAudioProcessPropertyDevices, input scope). Returns nil when the query fails.
+func inputDeviceIDsForProcessObject(_ objectID: AudioObjectID) -> [AudioObjectID]? {
+    var address = AudioObjectPropertyAddress(
+        mSelector: kAudioProcessPropertyDevices,
+        mScope: kAudioObjectPropertyScopeInput,
+        mElement: kAudioObjectPropertyElementMain
+    )
+    var size: UInt32 = 0
+    guard AudioObjectGetPropertyDataSize(objectID, &address, 0, nil, &size) == noErr else { return nil }
+    let count = Int(size) / MemoryLayout<AudioObjectID>.size
+    guard count > 0 else { return [] }
+    var deviceIDs = [AudioObjectID](repeating: kAudioObjectUnknown, count: count)
+    guard AudioObjectGetPropertyData(objectID, &address, 0, nil, &size, &deviceIDs) == noErr else { return nil }
+    return Array(deviceIDs.prefix(Int(size) / MemoryLayout<AudioObjectID>.size))
+}
+
+/// True when a process runs input on a real input device. Reading a process
+/// tap also counts as "running input" in Core Audio; see MicInputClassifier.
+func isProcessUsingMic(_ objectID: AudioObjectID) -> Bool {
+    var address = AudioObjectPropertyAddress(
+        mSelector: kAudioProcessPropertyIsRunningInput,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: kAudioObjectPropertyElementMain
+    )
+    var isRunning: UInt32 = 0
+    var size = UInt32(MemoryLayout<UInt32>.size)
+    let isRunningInput = AudioObjectGetPropertyData(objectID, &address, 0, nil, &size, &isRunning) == noErr
+        && isRunning != 0
+    guard isRunningInput else { return false }
+    return MicInputClassifier.isUsingMic(
+        isRunningInput: true,
+        inputDeviceCount: inputDeviceIDsForProcessObject(objectID)?.count
+    )
+}
+
 /// Get the parent PID of a process via sysctl.
 func parentPID(of pid: pid_t) -> pid_t? {
     var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]

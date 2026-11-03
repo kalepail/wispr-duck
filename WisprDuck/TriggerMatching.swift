@@ -33,6 +33,27 @@ enum BundleIDResolution {
     }
 }
 
+enum MicInputClassifier {
+    /// Decide whether a process that Core Audio reports as "running input"
+    /// really uses a microphone.
+    ///
+    /// Reading a process tap (recording other apps' audio) also sets
+    /// kAudioProcessPropertyIsRunningInput, but such a process lists no input
+    /// device. Screen recorders, meeting recorders, and audio meters would
+    /// otherwise trigger ducking with no mic in use.
+    ///
+    /// - Parameters:
+    ///   - isRunningInput: kAudioProcessPropertyIsRunningInput.
+    ///   - inputDeviceCount: Devices in kAudioProcessPropertyDevices (input
+    ///     scope), or nil when the query failed. A failed query counts as mic
+    ///     use, so a real dictation is never missed.
+    static func isUsingMic(isRunningInput: Bool, inputDeviceCount: Int?) -> Bool {
+        guard isRunningInput else { return false }
+        guard let inputDeviceCount else { return true }
+        return inputDeviceCount > 0
+    }
+}
+
 enum TriggerMatcher {
     /// Decide whether the current mic activity should duck other audio.
     ///

@@ -128,3 +128,26 @@ final class TriggerMatcherTests: XCTestCase {
         XCTAssertFalse(shouldTrigger(inputProcessCount: 0, inputs: [], triggerAll: true, triggers: []))
     }
 }
+
+final class MicInputClassifierTests: XCTestCase {
+    func testProcessThatIsNotRunningInputIsNotAMicUser() {
+        XCTAssertFalse(MicInputClassifier.isUsingMic(isRunningInput: false, inputDeviceCount: 1))
+        XCTAssertFalse(MicInputClassifier.isUsingMic(isRunningInput: false, inputDeviceCount: nil))
+    }
+
+    func testProcessReadingAMicDeviceIsAMicUser() {
+        XCTAssertTrue(MicInputClassifier.isUsingMic(isRunningInput: true, inputDeviceCount: 1))
+        XCTAssertTrue(MicInputClassifier.isUsingMic(isRunningInput: true, inputDeviceCount: 2))
+    }
+
+    /// Regression: an app that only reads a process tap (a system-audio
+    /// recorder or level meter) is "running input" with no input device.
+    /// In Trigger All mode it ducked audio with no mic in use.
+    func testTapOnlyReaderIsNotAMicUser() {
+        XCTAssertFalse(MicInputClassifier.isUsingMic(isRunningInput: true, inputDeviceCount: 0))
+    }
+
+    func testFailedDeviceQueryStillCountsAsMicUse() {
+        XCTAssertTrue(MicInputClassifier.isUsingMic(isRunningInput: true, inputDeviceCount: nil))
+    }
+}

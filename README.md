@@ -68,7 +68,7 @@ Click the duck foot icon in your menu bar:
 | **Trigger All Apps** | Duck when any app records from the mic, or toggle off to pick specific trigger apps |
 | **Duck All Apps** | Duck every app that is playing audio, or toggle off to pick specific apps to duck |
 
-**Trigger All Apps** uses per-process mic input only, so playback through an audio interface with inputs (for example a Focusrite Scarlett) does not count as mic use. **Duck All Apps** skips system audio daemons, and it picks up an app that starts playing during a dictation within about 0.5 s.
+**Trigger All Apps** uses per-process mic input only, so playback through an audio interface with inputs (for example a Focusrite Scarlett) does not count as mic use. An app that records only system audio (a screen or meeting recorder, or an audio meter) also does not count, because it reads no input device. **Duck All Apps** skips system audio daemons, and it picks up an app that starts playing during a dictation within about 0.5 s.
 
 ## Using with Granola Voice Typing
 
@@ -148,7 +148,7 @@ The check builds WisprDuck (Release) from your checkout. It plays a 440 Hz test 
 | While the mic is open | The tone plays within 2 dB of the duck level (10% = -20 dB) |
 | After the mic closes | The tone ramps back to full in 2 s or less, then the taps are removed |
 
-The script saves your WisprDuck settings and restores them on exit. If WisprDuck is running, the script quits it and starts it again at the end. On the first run, macOS asks for two permissions: System Audio Recording for "WisprDuck Test Harness" and Microphone for "WisprDuck Test Mic". The test apps are signed with your Apple Development identity, so the permissions stay after a rebuild. Use `--app PATH` to test a different build, and `--duck-level N` to test a different level.
+The script saves your WisprDuck settings and restores them on exit. If WisprDuck is running, the script quits it and starts it again at the end. On the first run, macOS asks for two permissions: System Audio Recording for "WisprDuck Test Harness" and Microphone for "WisprDuck Test Mic". The test apps are signed with your Apple Development identity, so the permissions stay after a rebuild. Use `--app PATH` to test a different build, and `--duck-level N` to test a different level. Use `--trigger-all` to test Trigger All Apps: the level meter records system audio, so this run also checks that system-audio recorders do not trigger ducking.
 
 To see WisprDuck's duck and restore decisions live:
 
