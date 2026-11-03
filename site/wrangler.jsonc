@@ -7,8 +7,12 @@
 		"binding": "ASSETS"
 	},
 	"routes": [
+		// wisprduck.com is a Cloudflare for SaaS custom hostname on stellar.buzz.
+		// Its traffic matches the fallback-origin route, not the wisprduck.com/*
+		// route. Never widen this to *stellar.buzz/*: that pattern takes over
+		// every stellar.buzz Worker custom domain.
 		{
-			"pattern": "*stellar.buzz/*",
+			"pattern": "proxy-fallback.stellar.buzz/*",
 			"zone_name": "stellar.buzz"
 		},
 		{
