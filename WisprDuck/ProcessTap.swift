@@ -10,7 +10,7 @@ private let logger = Logger(subsystem: "com.wisprduck", category: "ProcessTap")
 ///
 /// Lifecycle: init → start() → updateDuckLevel() → stop() → deinit
 /// Cleanup order: AudioDeviceStop → DestroyIOProcID → DestroyAggregateDevice → DestroyProcessTap
-final class ProcessTap {
+final class ProcessTap: DuckTap {
     let processObjectID: AudioObjectID
     let pid: pid_t
     private(set) var lastError: String?
@@ -22,11 +22,12 @@ final class ProcessTap {
     private let aggregateUUID = UUID()
     private let ioQueue = DispatchQueue(label: "com.wisprduck.processtap.io", qos: .userInitiated)
     private var isRunning = false
+    /// A stopped tap is never restarted: its teardown may still be pending.
+    private var hasStopped = false
     private var tapFormatIsFloat32 = true
 
-    private var targetLevel: Float = 1.0
-    private var currentLevel: Float = 1.0
-    private var rampRate: Float = 0.0 // Max change per sample (linear ramp)
+    /// Volume ramp state. Read and written only on `ioQueue` once the device starts.
+    private var ramp = LinearGainRamp(level: 1.0, stepPerFrame: LinearGainRamp.stepPerFrame(sampleRate: 48_000))
 
     init(processObjectID: AudioObjectID, pid: pid_t) {
         self.processObjectID = processObjectID
@@ -34,7 +35,9 @@ final class ProcessTap {
     }
 
     deinit {
-        stop()
+        // A started tap is retained by its IO proc block until teardown finishes,
+        // so by the time deinit runs every Core Audio resource is already released.
+        // A tap that failed to start cleaned up synchronously in start().
     }
 
     // MARK: - Public API
@@ -45,11 +48,14 @@ final class ProcessTap {
     ///   - duckLevel: Volume factor 0.0–1.0 (e.g., 0.2 for 20%)
     func start(outputDeviceUID: String, duckLevel: Float) -> Bool {
         guard !isRunning else { return true }
+        guard !hasStopped else {
+            lastError = "Internal error: a stopped tap for PID \(pid) cannot be restarted."
+            return false
+        }
         lastError = nil
 
-        let clampedLevel = max(0.0, min(1.0, duckLevel))
-        targetLevel = clampedLevel
-        currentLevel = clampedLevel // Start at duck level — no ramp on duck-in to avoid silence→pop
+        // Start at duck level — no ramp on duck-in to avoid silence→pop
+        ramp = LinearGainRamp(level: duckLevel, stepPerFrame: ramp.stepPerFrame)
 
         // 1. Create tap description
         let tapDesc = CATapDescription(stereoMixdownOfProcesses: [processObjectID])
@@ -67,8 +73,8 @@ final class ProcessTap {
             return false
         }
 
-        // 3. Compute linear ramp rate from tap's sample rate
-        rampRate = computeRampRate(tapID: tapID)
+        // 3. Read the tap format (sample type and fallback sample rate)
+        let tapSampleRate = readTapFormat(tapID: tapID)
 
         // 4. Create aggregate device combining real output + tap
         let aggDesc: [String: Any] = [
@@ -102,6 +108,11 @@ final class ProcessTap {
             return false
         }
 
+        // The IO proc runs at the aggregate device's rate (clocked by the output
+        // device), so derive the per-frame ramp step from that rate.
+        let ioSampleRate = nominalSampleRate(deviceID: aggregateDeviceID) ?? tapSampleRate
+        ramp.stepPerFrame = LinearGainRamp.stepPerFrame(sampleRate: ioSampleRate)
+
         // 5. Create IO proc (block-based, dispatched to our serial queue)
         status = AudioDeviceCreateIOProcIDWithBlock(&ioProcID, aggregateDeviceID, ioQueue) {
             [self] _, inInputData, _, outOutputData, _ in
@@ -134,13 +145,26 @@ final class ProcessTap {
         return true
     }
 
-    /// Stop intercepting audio. Cleans up all Core Audio resources.
-    /// Safe to call multiple times.
+    /// Serial queue for Core Audio teardown. AudioDeviceStop can block for a long
+    /// time when the HAL is busy restarting the aggregate's IO, so teardown never
+    /// runs on the main thread (which would freeze the menu bar UI).
+    private static let teardownQueue = DispatchQueue(label: "com.wisprduck.processtap.teardown", qos: .userInitiated)
+
+    /// Stop intercepting audio. Cleans up all Core Audio resources asynchronously,
+    /// in strict order. Safe to call multiple times.
     func stop() {
         guard isRunning else { return }
         isRunning = false
+        hasStopped = true
 
-        // Strict cleanup order: Stop → DestroyIOProc → DestroyAggregate → DestroyTap
+        // The teardown block keeps `self` alive until the IO proc is destroyed.
+        Self.teardownQueue.async { [self] in
+            teardown()
+        }
+    }
+
+    /// Strict cleanup order: Stop → DestroyIOProc → DestroyAggregate → DestroyTap
+    private func teardown() {
         if let procID = ioProcID {
             let status = AudioDeviceStop(aggregateDeviceID, procID)
             if status != noErr {
@@ -154,9 +178,9 @@ final class ProcessTap {
 
     /// Update the duck level while the tap is running.
     func updateDuckLevel(_ level: Float) {
-        let clampedLevel = max(0.0, min(1.0, level))
+        let clampedLevel = LinearGainRamp.clamp(level)
         ioQueue.async { [weak self] in
-            self?.targetLevel = clampedLevel
+            self?.ramp.target = clampedLevel
         }
     }
 
@@ -198,10 +222,9 @@ final class ProcessTap {
             return
         }
 
-        let target = targetLevel
-        var current = currentLevel
-        let rate = rampRate
-
+        // Every buffer in this render cycle starts from the same gain, so
+        // separate channel buffers never drift apart.
+        var endLevel = ramp.level
         for (i, output) in outputs.enumerated() {
             let inputIndex = tapOffset + i
             guard inputIndex < inputs.count,
@@ -213,21 +236,16 @@ final class ProcessTap {
                 continue
             }
 
-            let inSamples = inData.assumingMemoryBound(to: Float.self)
-            let outSamples = outData.assumingMemoryBound(to: Float.self)
             let byteCount = min(Int(inputs[inputIndex].mDataByteSize), Int(output.mDataByteSize))
-            let sampleCount = byteCount / MemoryLayout<Float>.size
-
-            for j in 0..<sampleCount {
-                // Linear ramp: move toward target at a fixed rate per sample.
-                // A full 0→1 sweep takes exactly 1 second. Partial sweeps are proportional.
-                let delta = target - current
-                current += max(-rate, min(rate, delta))
-                outSamples[j] = inSamples[j] * current
-            }
+            endLevel = ramp.scale(
+                inData.assumingMemoryBound(to: Float.self),
+                into: outData.assumingMemoryBound(to: Float.self),
+                sampleCount: byteCount / MemoryLayout<Float>.size,
+                channelsPerFrame: Int(inputs[inputIndex].mNumberChannels)
+            )
         }
 
-        currentLevel = current
+        ramp.level = endLevel
     }
 
     // MARK: - Cleanup Helpers
@@ -261,10 +279,9 @@ final class ProcessTap {
 
     // MARK: - Helpers
 
-    /// Compute the linear ramp rate (max volume change per sample) for 1-second transitions.
-    /// At 48kHz: rate = 1/48000 ≈ 0.00002. A full 0→1 sweep takes exactly 1s.
-    /// Partial sweeps are proportional (e.g., 0.1→1.0 takes 0.9s).
-    private func computeRampRate(tapID: AudioObjectID) -> Float {
+    /// Read the tap's stream format. Records whether it is Float32 PCM and
+    /// returns its sample rate (or a fallback when unavailable).
+    private func readTapFormat(tapID: AudioObjectID) -> Double {
         var formatAddress = AudioObjectPropertyAddress(
             mSelector: kAudioTapPropertyFormat,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -278,11 +295,18 @@ final class ProcessTap {
             && format.mFormatID == kAudioFormatLinearPCM
             && (format.mFormatFlags & kAudioFormatFlagIsFloat) != 0
             && format.mBitsPerChannel == 32
-        let sampleRate: Float = (status == noErr && format.mSampleRate > 0)
-            ? Float(format.mSampleRate)
-            : 44100.0 // Fallback
+        return (status == noErr && format.mSampleRate > 0) ? format.mSampleRate : 44_100.0
+    }
 
-        let rampDuration: Float = 1.0 // Full 0→1 sweep in 1 second
-        return 1.0 / (sampleRate * rampDuration)
+    private func nominalSampleRate(deviceID: AudioObjectID) -> Double? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyNominalSampleRate,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var rate: Float64 = 0
+        var size = UInt32(MemoryLayout<Float64>.size)
+        let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &rate)
+        return (status == noErr && rate > 0) ? rate : nil
     }
 }

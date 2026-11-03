@@ -17,6 +17,18 @@ xcodebuild \
   CODE_SIGNING_ALLOWED=NO \
   build
 
+echo "==> Running unit tests"
+xcodebuild \
+  -project WisprDuck.xcodeproj \
+  -scheme WisprDuck \
+  -configuration Debug \
+  -derivedDataPath "$DERIVED_DATA_PATH" \
+  CODE_SIGNING_ALLOWED=NO \
+  test
+
+echo "==> Building mic probe"
+DERIVED_DATA_PATH="$DERIVED_DATA_PATH" "$ROOT_DIR/scripts/mic-probe.sh" --help >/dev/null
+
 echo "==> Building native app (Release)"
 xcodebuild \
   -project WisprDuck.xcodeproj \

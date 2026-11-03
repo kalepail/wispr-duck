@@ -10,6 +10,8 @@ struct AudioProcess: Identifiable, Hashable {
     let objectID: AudioObjectID
     let bundleID: String?
     let name: String
+    /// Whether the process is producing audio output right now.
+    var isRunningOutput: Bool = true
 
     var id: pid_t { pid }
 
@@ -29,11 +31,40 @@ struct AudioApp: Identifiable, Hashable {
     var id: String { bundleID }
 }
 
+/// A running duck tap for one process. `ProcessTap` is the real implementation;
+/// tests substitute a fake so tap lifecycle logic runs without Core Audio.
+protocol DuckTap: AnyObject {
+    var lastError: String? { get }
+    func start(outputDeviceUID: String, duckLevel: Float) -> Bool
+    func stop()
+    func updateDuckLevel(_ level: Float)
+}
+
+/// System services used by ProcessTapManager. `.live` talks to Core Audio and
+/// Launch Services; tests inject deterministic fakes.
+struct AudioSystemEnvironment {
+    var enumerateProcesses: () -> [AudioProcess]
+    var defaultOutputDeviceUID: () -> String?
+    var makeTap: (AudioProcess) -> DuckTap
+    var applicationURL: (String) -> URL?
+    /// When false, no Core Audio property listeners are registered.
+    var observesSystemChanges: Bool
+
+    static let live = AudioSystemEnvironment(
+        enumerateProcesses: enumerateSystemAudioProcesses,
+        defaultOutputDeviceUID: systemDefaultOutputDeviceUID,
+        makeTap: { ProcessTap(processObjectID: $0.objectID, pid: $0.pid) },
+        applicationURL: { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) },
+        observesSystemChanges: true
+    )
+}
+
 /// Manages per-process audio taps for volume ducking.
 /// Enumerates audio-producing processes, creates/destroys ProcessTap instances,
 /// and monitors for new audio processes appearing while ducked.
 final class ProcessTapManager {
-    private var activeTaps: [pid_t: ProcessTap] = [:]
+    private let environment: AudioSystemEnvironment
+    private var activeTaps: [pid_t: DuckTap] = [:]
     private var processListListenerBlock: AudioObjectPropertyListenerBlock?
     private let listenerQueue = DispatchQueue(label: "com.wisprduck.processmonitor", qos: .userInitiated)
     private var isDucking = false
@@ -49,85 +80,38 @@ final class ProcessTapManager {
 
     /// Cache for bundle ID → root app bundle ID resolution.
     /// Avoids repeated NSWorkspace lookups for the same helper bundle IDs.
+    /// Accessed on the main thread only.
     private var rootBundleIDCache: [String: String] = [:]
+
+    init(environment: AudioSystemEnvironment = .live) {
+        self.environment = environment
+    }
+
+    /// True while a duck session is active (between duck() and restore).
+    /// Taps are only created for newly appearing processes during a session.
+    var isSessionActive: Bool { isDucking }
+
+    /// Number of taps currently alive, including taps that are fading out.
+    var activeTapCount: Int { activeTaps.count }
 
     // MARK: - Root App Resolution
 
     /// Resolves a helper/subprocess bundle ID to its parent app's bundle ID.
-    /// e.g., "com.google.Chrome.helper.Renderer" → "com.google.Chrome"
-    ///
-    /// Walks up the bundle ID hierarchy (stripping trailing components) until
-    /// it finds a top-level app. Helper apps embedded inside a parent .app
-    /// (e.g., Chrome Helper.app inside Chrome.app) are skipped — only the
-    /// outermost app counts.
+    /// See `BundleIDResolution.rootAppBundleID(for:applicationURL:)`.
     func rootAppBundleID(for bundleID: String) -> String {
         if let cached = rootBundleIDCache[bundleID] {
             return cached
         }
-
-        var components = bundleID.split(separator: ".").map(String.init)
-
-        // Try progressively shorter prefixes until we find a top-level app
-        while components.count > 2 {
-            let candidate = components.joined(separator: ".")
-            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: candidate),
-               isTopLevelApp(url) {
-                rootBundleIDCache[bundleID] = candidate
-                return candidate
-            }
-            components.removeLast()
-        }
-
-        // No parent app found — use original
-        rootBundleIDCache[bundleID] = bundleID
-        return bundleID
-    }
-
-    /// Check if an app URL is a top-level app (not nested inside another .app bundle).
-    /// e.g., "/Applications/Chrome.app" → true
-    ///       "/Applications/Chrome.app/Contents/Frameworks/Chrome Helper.app" → false
-    private func isTopLevelApp(_ url: URL) -> Bool {
-        let appExtensions = url.pathComponents.filter { $0.hasSuffix(".app") }
-        return appExtensions.count <= 1
+        let root = BundleIDResolution.rootAppBundleID(for: bundleID, applicationURL: environment.applicationURL)
+        rootBundleIDCache[bundleID] = root
+        return root
     }
 
     // MARK: - Process Enumeration
 
     /// Returns all processes currently producing audio, excluding our own process.
     func enumerateAudioProcesses() -> [AudioProcess] {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyProcessObjectList,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        // Get size
-        var size: UInt32 = 0
-        var status = AudioObjectGetPropertyDataSize(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address, 0, nil, &size
-        )
-        guard status == noErr, size > 0 else { return [] }
-
-        // Get process object IDs
-        let count = Int(size) / MemoryLayout<AudioObjectID>.size
-        var objectIDs = [AudioObjectID](repeating: 0, count: count)
-        status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address, 0, nil, &size, &objectIDs
-        )
-        guard status == noErr else { return [] }
-
-        let myPID = ProcessInfo.processInfo.processIdentifier
-
-        return objectIDs.compactMap { objectID -> AudioProcess? in
-            guard let pid = pidForProcessObject(objectID), pid != myPID else { return nil }
-            let identity = appIdentityForProcessOrAncestor(pid)
-            let bundleID = identity?.bundleID
-            let name = identity?.name
-
-            return AudioProcess(pid: pid, objectID: objectID, bundleID: bundleID, name: name ?? "PID \(pid)")
-        }
+        environment.enumerateProcesses()
     }
 
     /// Returns deduplicated apps grouped by root app bundle ID.
@@ -140,15 +124,21 @@ final class ProcessTapManager {
         var seen = Set<String>()
         var apps: [AudioApp] = []
 
+        // Build the running-app lookup once instead of scanning it per process.
+        var runningApps: [String: NSRunningApplication] = [:]
+        for app in NSWorkspace.shared.runningApplications {
+            if let id = app.bundleIdentifier, runningApps[id] == nil {
+                runningApps[id] = app
+            }
+        }
+
         for process in processes {
             guard let bid = process.bundleID else { continue }
             let rootBID = rootAppBundleID(for: bid)
             guard !seen.contains(rootBID) else { continue }
             seen.insert(rootBID)
 
-            let rootApp = NSWorkspace.shared.runningApplications.first {
-                $0.bundleIdentifier == rootBID
-            }
+            let rootApp = runningApps[rootBID]
             if includeAccessory {
                 // Include regular apps and menu-bar accessories, exclude background daemons
                 guard let policy = rootApp?.activationPolicy,
@@ -230,9 +220,10 @@ final class ProcessTapManager {
         bundleIDs: Set<String>,
         duckAll: Bool,
         duckLevel: Float,
-        outputDeviceUID: String
+        outputDeviceUID: String,
+        processes: [AudioProcess]? = nil
     ) -> Bool {
-        let processes = enumerateAudioProcesses()
+        let processes = processes ?? enumerateAudioProcesses()
         let processesByPID = Dictionary(processes.map { ($0.pid, $0) }, uniquingKeysWith: { first, _ in first })
 
         for pid in Array(activeTaps.keys) {
@@ -254,15 +245,21 @@ final class ProcessTapManager {
 
         let toDuck = processes.filter { process in
             guard activeTaps[process.pid] == nil else { return false }
-            if duckAll { return true }
+            // Duck-all mode only taps processes that are playing. Core Audio
+            // lists every audio client (often 40+ idle daemons), and one tap
+            // plus aggregate device each stalled the main thread for seconds.
+            // Processes that start playing later are picked up by the next
+            // reconcile (the 0.5 s re-evaluation timer while triggered).
+            //
+            // Processes with no app identity (system daemons such as arkaudiod)
+            // are skipped: "Duck All Apps" means apps, and tapping audio daemons
+            // risks stalling Core Audio.
+            if duckAll { return process.isRunningOutput && process.bundleID != nil }
             return processMatchesSelection(process, selectedBundleIDs: bundleIDs)
         }
 
         for process in toDuck {
-            let tap = ProcessTap(
-                processObjectID: process.objectID,
-                pid: process.pid
-            )
+            let tap = environment.makeTap(process)
             if tap.start(outputDeviceUID: outputDeviceUID, duckLevel: duckLevel) {
                 activeTaps[process.pid] = tap
             } else {
@@ -295,6 +292,9 @@ final class ProcessTapManager {
     /// Taps stay in activeTaps during the fade so duck() can cancel and reuse them.
     /// Timer fires just before the ramp completes so the tap destruction pop lands at 100%.
     func restoreAllWithFade() {
+        // Already fading out: keep the scheduled teardown instead of restarting it.
+        if !isDucking, fadeOutTimer != nil { return }
+
         isDucking = false
         fadeOutGeneration += 1
         let generation = fadeOutGeneration
@@ -347,7 +347,7 @@ final class ProcessTapManager {
     /// Start monitoring the audio process list. Always-on for UI updates;
     /// also creates/removes taps dynamically while ducking is active.
     func startProcessListMonitoring() {
-        guard processListListenerBlock == nil else { return }
+        guard environment.observesSystemChanges, processListListenerBlock == nil else { return }
 
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyProcessObjectList,
@@ -402,7 +402,7 @@ final class ProcessTapManager {
     // MARK: - Output Device Monitoring
 
     private func startOutputDeviceMonitoring() {
-        guard outputDeviceListenerBlock == nil else { return }
+        guard environment.observesSystemChanges, outputDeviceListenerBlock == nil else { return }
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultOutputDevice,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -456,11 +456,12 @@ final class ProcessTapManager {
         _ = duck(bundleIDs: bundleIDs, duckAll: duckAll, duckLevel: level)
     }
 
-    private func handleProcessListChanged(with processes: [AudioProcess]) {
+    /// Handle a new process list from the Core Audio listener (main thread).
+    func handleProcessListChanged(with processes: [AudioProcess]) {
         // Always notify UI so the app list stays current
         onProcessListChanged?(processes)
 
-        // Only manage taps while actively ducking
+        // Only manage taps while a duck session is active (not while fading out)
         guard isDucking else { return }
 
         guard let outputUID = getDefaultOutputDeviceUID() else {
@@ -468,35 +469,14 @@ final class ProcessTapManager {
             return
         }
 
-        // Create taps for new matching processes
-        let toDuck = processes.filter { process in
-            guard activeTaps[process.pid] == nil else { return false }
-            if duckAllMode { return true }
-            return processMatchesSelection(process, selectedBundleIDs: currentBundleIDs)
-        }
-
-        for process in toDuck {
-            let tap = ProcessTap(
-                processObjectID: process.objectID,
-                pid: process.pid
-            )
-            if tap.start(outputDeviceUID: outputUID, duckLevel: currentDuckLevel) {
-                activeTaps[process.pid] = tap
-            } else {
-                reportError(
-                    tap.lastError
-                    ?? "WisprDuck could not start system audio capture. Grant Screen & System Audio Recording permission."
-                )
-            }
-        }
-
-        // Clean up taps for processes that have stopped producing audio
-        let activePIDs = Set(processes.map(\.pid))
-        let stalePIDs = activeTaps.keys.filter { !activePIDs.contains($0) }
-        for pid in stalePIDs {
-            activeTaps[pid]?.stop()
-            activeTaps.removeValue(forKey: pid)
-        }
+        // Start taps for new matching processes and drop taps for processes that left.
+        reconcileActiveTaps(
+            bundleIDs: currentBundleIDs,
+            duckAll: duckAllMode,
+            duckLevel: currentDuckLevel,
+            outputDeviceUID: outputUID,
+            processes: processes
+        )
     }
 
     /// Set a callback for when the process list changes (for UI updates).
@@ -535,37 +515,7 @@ final class ProcessTapManager {
     // MARK: - Output Device Helpers
 
     private func getDefaultOutputDeviceUID() -> String? {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var deviceID: AudioDeviceID = kAudioObjectUnknown
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-
-        var status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address, 0, nil, &size, &deviceID
-        )
-        guard status == noErr, deviceID != kAudioObjectUnknown else {
-            logger.error("Could not get default output device: \(describeOSStatus(status))")
-            return nil
-        }
-
-        var uidAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyDeviceUID,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var uid: Unmanaged<CFString>?
-        var uidSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
-
-        status = AudioObjectGetPropertyData(deviceID, &uidAddress, 0, nil, &uidSize, &uid)
-        guard status == noErr, let uid else {
-            logger.error("Could not get default output device UID: \(describeOSStatus(status))")
-            return nil
-        }
-        return uid.takeRetainedValue() as String
+        environment.defaultOutputDeviceUID()
     }
 
     private func reportError(_ message: String) {
@@ -581,6 +531,93 @@ final class ProcessTapManager {
         systemAudioPrimer?.stop()
         restoreAll()
     }
+}
+
+// MARK: - Live Core Audio Queries
+
+/// Returns all processes known to Core Audio, excluding our own process.
+func enumerateSystemAudioProcesses() -> [AudioProcess] {
+    var address = AudioObjectPropertyAddress(
+        mSelector: kAudioHardwarePropertyProcessObjectList,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: kAudioObjectPropertyElementMain
+    )
+
+    var size: UInt32 = 0
+    var status = AudioObjectGetPropertyDataSize(
+        AudioObjectID(kAudioObjectSystemObject),
+        &address, 0, nil, &size
+    )
+    guard status == noErr, size > 0 else { return [] }
+
+    let count = Int(size) / MemoryLayout<AudioObjectID>.size
+    var objectIDs = [AudioObjectID](repeating: 0, count: count)
+    status = AudioObjectGetPropertyData(
+        AudioObjectID(kAudioObjectSystemObject),
+        &address, 0, nil, &size, &objectIDs
+    )
+    guard status == noErr else { return [] }
+
+    let myPID = ProcessInfo.processInfo.processIdentifier
+
+    return objectIDs.compactMap { objectID -> AudioProcess? in
+        guard let pid = pidForProcessObject(objectID), pid != myPID else { return nil }
+        let identity = appIdentityForProcessOrAncestor(pid)
+        return AudioProcess(
+            pid: pid,
+            objectID: objectID,
+            bundleID: identity?.bundleID,
+            name: identity?.name ?? "PID \(pid)",
+            isRunningOutput: isProcessRunningOutput(objectID)
+        )
+    }
+}
+
+func isProcessRunningOutput(_ objectID: AudioObjectID) -> Bool {
+    var address = AudioObjectPropertyAddress(
+        mSelector: kAudioProcessPropertyIsRunningOutput,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: kAudioObjectPropertyElementMain
+    )
+    var isRunning: UInt32 = 0
+    var size = UInt32(MemoryLayout<UInt32>.size)
+    let status = AudioObjectGetPropertyData(objectID, &address, 0, nil, &size, &isRunning)
+    return status == noErr && isRunning != 0
+}
+
+/// Returns the UID of the current default output device.
+func systemDefaultOutputDeviceUID() -> String? {
+    var address = AudioObjectPropertyAddress(
+        mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: kAudioObjectPropertyElementMain
+    )
+    var deviceID: AudioDeviceID = kAudioObjectUnknown
+    var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+
+    var status = AudioObjectGetPropertyData(
+        AudioObjectID(kAudioObjectSystemObject),
+        &address, 0, nil, &size, &deviceID
+    )
+    guard status == noErr, deviceID != kAudioObjectUnknown else {
+        logger.error("Could not get default output device: \(describeOSStatus(status))")
+        return nil
+    }
+
+    var uidAddress = AudioObjectPropertyAddress(
+        mSelector: kAudioDevicePropertyDeviceUID,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: kAudioObjectPropertyElementMain
+    )
+    var uid: Unmanaged<CFString>?
+    var uidSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+
+    status = AudioObjectGetPropertyData(deviceID, &uidAddress, 0, nil, &uidSize, &uid)
+    guard status == noErr, let uid else {
+        logger.error("Could not get default output device UID: \(describeOSStatus(status))")
+        return nil
+    }
+    return uid.takeRetainedValue() as String
 }
 
 /// A short-lived, unmuted Core Audio tap used only to trigger the system-audio

@@ -18,6 +18,22 @@
 		A1000001000000000000000E /* Utilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000000E /* Utilities.swift */; };
 		A100000100000000000000C0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A100000200000000000000C0 /* Assets.xcassets */; };
 		A100000100000000000000D0 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = A100000200000000000000D0 /* AppIcon.icns */; };
+		A1000001000000000000000F /* TriggerMatching.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000000F /* TriggerMatching.swift */; };
+		A10000010000000000000010 /* GainRamp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000010 /* GainRamp.swift */; };
+		A10000010000000000000201 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000007 /* AppSettings.swift */; };
+		A10000010000000000000202 /* Utilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000000E /* Utilities.swift */; };
+		A10000010000000000000203 /* ProcessTap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000000A /* ProcessTap.swift */; };
+		A10000010000000000000204 /* ProcessTapManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000000B /* ProcessTapManager.swift */; };
+		A10000010000000000000205 /* MicMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000003 /* MicMonitor.swift */; };
+		A10000010000000000000206 /* DuckController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000004 /* DuckController.swift */; };
+		A10000010000000000000207 /* TriggerMatching.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000000F /* TriggerMatching.swift */; };
+		A10000010000000000000208 /* GainRamp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000010 /* GainRamp.swift */; };
+		A10000010000000000000209 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000101 /* TestSupport.swift */; };
+		A1000001000000000000020A /* TriggerMatchingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000102 /* TriggerMatchingTests.swift */; };
+		A1000001000000000000020B /* GainRampTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000103 /* GainRampTests.swift */; };
+		A1000001000000000000020C /* AppSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000104 /* AppSettingsTests.swift */; };
+		A1000001000000000000020D /* ProcessTapManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000105 /* ProcessTapManagerTests.swift */; };
+		A1000001000000000000020E /* DuckControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000106 /* DuckControllerTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,10 +51,26 @@
 		A100000200000000000000C0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A100000200000000000000D0 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		A10000030000000000000001 /* WisprDuck.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WisprDuck.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1000002000000000000000F /* TriggerMatching.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriggerMatching.swift; sourceTree = "<group>"; };
+		A10000020000000000000010 /* GainRamp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GainRamp.swift; sourceTree = "<group>"; };
+		A10000020000000000000101 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
+		A10000020000000000000102 /* TriggerMatchingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriggerMatchingTests.swift; sourceTree = "<group>"; };
+		A10000020000000000000103 /* GainRampTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GainRampTests.swift; sourceTree = "<group>"; };
+		A10000020000000000000104 /* AppSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsTests.swift; sourceTree = "<group>"; };
+		A10000020000000000000105 /* ProcessTapManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessTapManagerTests.swift; sourceTree = "<group>"; };
+		A10000020000000000000106 /* DuckControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuckControllerTests.swift; sourceTree = "<group>"; };
+		A10000030000000000000002 /* WisprDuckTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WisprDuckTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A10000040000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000040000000000000003 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -52,6 +84,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000050000000000000002 /* WisprDuck */,
+				A10000050000000000000004 /* WisprDuckTests */,
 				A10000050000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -68,6 +101,8 @@
 				A1000002000000000000000B /* ProcessTapManager.swift */,
 				A1000002000000000000000C /* WelcomeView.swift */,
 				A1000002000000000000000E /* Utilities.swift */,
+				A1000002000000000000000F /* TriggerMatching.swift */,
+				A10000020000000000000010 /* GainRamp.swift */,
 				A100000200000000000000C0 /* Assets.xcassets */,
 				A100000200000000000000D0 /* AppIcon.icns */,
 				A10000020000000000000008 /* Info.plist */,
@@ -80,8 +115,22 @@
 			isa = PBXGroup;
 			children = (
 				A10000030000000000000001 /* WisprDuck.app */,
+				A10000030000000000000002 /* WisprDuckTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A10000050000000000000004 /* WisprDuckTests */ = {
+			isa = PBXGroup;
+			children = (
+				A10000020000000000000101 /* TestSupport.swift */,
+				A10000020000000000000102 /* TriggerMatchingTests.swift */,
+				A10000020000000000000103 /* GainRampTests.swift */,
+				A10000020000000000000104 /* AppSettingsTests.swift */,
+				A10000020000000000000105 /* ProcessTapManagerTests.swift */,
+				A10000020000000000000106 /* DuckControllerTests.swift */,
+			);
+			path = WisprDuckTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -104,6 +153,22 @@
 			productReference = A10000030000000000000001 /* WisprDuck.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A10000060000000000000002 /* WisprDuckTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000080000000000000003 /* Build configuration list for PBXNativeTarget "WisprDuckTests" */;
+			buildPhases = (
+				A10000070000000000000002 /* Sources */,
+				A10000040000000000000003 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WisprDuckTests;
+			productName = WisprDuckTests;
+			productReference = A10000030000000000000002 /* WisprDuckTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -115,6 +180,9 @@
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
 					A10000060000000000000001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					A10000060000000000000002 = {
 						CreatedOnToolsVersion = 15.0;
 					};
 				};
@@ -133,6 +201,7 @@
 			projectRoot = "";
 			targets = (
 				A10000060000000000000001 /* WisprDuck */,
+				A10000060000000000000002 /* WisprDuckTests */,
 			);
 		};
 /* End PBXProject section */
@@ -163,6 +232,29 @@
 				A10000010000000000000009 /* ProcessTapManager.swift in Sources */,
 				A1000001000000000000000C /* WelcomeView.swift in Sources */,
 				A1000001000000000000000E /* Utilities.swift in Sources */,
+				A1000001000000000000000F /* TriggerMatching.swift in Sources */,
+				A10000010000000000000010 /* GainRamp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000070000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000010000000000000201 /* AppSettings.swift in Sources */,
+				A10000010000000000000202 /* Utilities.swift in Sources */,
+				A10000010000000000000203 /* ProcessTap.swift in Sources */,
+				A10000010000000000000204 /* ProcessTapManager.swift in Sources */,
+				A10000010000000000000205 /* MicMonitor.swift in Sources */,
+				A10000010000000000000206 /* DuckController.swift in Sources */,
+				A10000010000000000000207 /* TriggerMatching.swift in Sources */,
+				A10000010000000000000208 /* GainRamp.swift in Sources */,
+				A10000010000000000000209 /* TestSupport.swift in Sources */,
+				A1000001000000000000020A /* TriggerMatchingTests.swift in Sources */,
+				A1000001000000000000020B /* GainRampTests.swift in Sources */,
+				A1000001000000000000020C /* AppSettingsTests.swift in Sources */,
+				A1000001000000000000020D /* ProcessTapManagerTests.swift in Sources */,
+				A1000001000000000000020E /* DuckControllerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -340,6 +432,34 @@
 			};
 			name = Release;
 		};
+		A1000000A000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wisprduck.WisprDuckTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		A1000000A000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wisprduck.WisprDuckTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -357,6 +477,15 @@
 			buildConfigurations = (
 				A1000000A000000000000001 /* Debug */,
 				A1000000A000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000080000000000000003 /* Build configuration list for PBXNativeTarget "WisprDuckTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1000000A000000000000005 /* Debug */,
+				A1000000A000000000000006 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -28,6 +28,19 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
+      - name: Run unit tests
+        run: |
+          xcodebuild \
+            -project WisprDuck.xcodeproj \
+            -scheme WisprDuck \
+            -configuration Debug \
+            -derivedDataPath DerivedData/CI \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+
+      - name: Build mic probe
+        run: DERIVED_DATA_PATH=DerivedData/CI ./scripts/mic-probe.sh --help
+
       - name: Build native release
         run: |
           xcodebuild \

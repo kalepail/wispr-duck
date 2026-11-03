@@ -1,30 +1,51 @@
 import SwiftUI
 
-private let duckBundleIDsKey = "duckBundleIDs3"
-private let triggerBundleIDsKey = "triggerBundleIDs3"
-private let wisprFlowHelperTriggerMigrationKey = "wisprFlowHelperTriggerMigration1"
-private let wisprFlowBundleID = "com.electron.wispr-flow"
-private let wisprFlowHelperBundleID = "com.electron.wispr-flow.accessibility-mac-app"
-
 @Observable
 final class AppSettings {
-    /// Called whenever a setting changes, so non-SwiftUI observers (e.g. DuckController) can react.
-    var onSettingsChanged: (() -> Void)?
+    /// UserDefaults keys. Exposed so diagnostics (scripts/mic-probe.sh) read the same values.
+    enum Keys {
+        static let isEnabled = "isEnabled"
+        static let duckLevel = "duckLevel"
+        static let duckAllApps = "duckAllApps"
+        static let triggerAllApps = "triggerAllApps2"
+        static let hasCompletedOnboarding = "hasCompletedOnboarding"
+        static let duckBundleIDs = "duckBundleIDs3"
+        static let triggerBundleIDs = "triggerBundleIDs3"
+        static let wisprFlowHelperTriggerMigration = "wisprFlowHelperTriggerMigration1"
+    }
 
-    var isEnabled: Bool = UserDefaults.standard.object(forKey: "isEnabled") as? Bool ?? true {
-        didSet { UserDefaults.standard.set(isEnabled, forKey: "isEnabled"); onSettingsChanged?() }
+    static let wisprFlowBundleID = "com.electron.wispr-flow"
+    static let wisprFlowHelperBundleID = "com.electron.wispr-flow.accessibility-mac-app"
+    static let duckLevelRange = 0...100
+
+    @ObservationIgnored private let defaults: UserDefaults
+
+    /// Called whenever a setting changes, so non-SwiftUI observers (e.g. DuckController) can react.
+    @ObservationIgnored var onSettingsChanged: (() -> Void)?
+
+    var isEnabled: Bool {
+        didSet { defaults.set(isEnabled, forKey: Keys.isEnabled); onSettingsChanged?() }
     }
-    var duckLevel: Int = UserDefaults.standard.object(forKey: "duckLevel") as? Int ?? 10 {
-        didSet { UserDefaults.standard.set(duckLevel, forKey: "duckLevel"); onSettingsChanged?() }
+    var duckLevel: Int {
+        didSet {
+            let clamped = Self.clampDuckLevel(duckLevel)
+            if clamped != duckLevel { duckLevel = clamped }
+            defaults.set(clamped, forKey: Keys.duckLevel)
+            onSettingsChanged?()
+        }
     }
-    var duckAllApps: Bool = UserDefaults.standard.object(forKey: "duckAllApps") as? Bool ?? false {
-        didSet { UserDefaults.standard.set(duckAllApps, forKey: "duckAllApps"); onSettingsChanged?() }
+    var duckAllApps: Bool {
+        didSet { defaults.set(duckAllApps, forKey: Keys.duckAllApps); onSettingsChanged?() }
     }
-    var triggerAllApps: Bool = UserDefaults.standard.object(forKey: "triggerAllApps2") as? Bool ?? false {
-        didSet { UserDefaults.standard.set(triggerAllApps, forKey: "triggerAllApps2"); onSettingsChanged?() }
+    var triggerAllApps: Bool {
+        didSet { defaults.set(triggerAllApps, forKey: Keys.triggerAllApps); onSettingsChanged?() }
     }
-    var hasCompletedOnboarding: Bool = UserDefaults.standard.object(forKey: "hasCompletedOnboarding") as? Bool ?? false {
-        didSet { UserDefaults.standard.set(hasCompletedOnboarding, forKey: "hasCompletedOnboarding") }
+    var hasCompletedOnboarding: Bool {
+        didSet { defaults.set(hasCompletedOnboarding, forKey: Keys.hasCompletedOnboarding) }
+    }
+
+    static func clampDuckLevel(_ level: Int) -> Int {
+        min(duckLevelRange.upperBound, max(duckLevelRange.lowerBound, level))
     }
 
     // MARK: - Default Selections
@@ -64,27 +85,41 @@ final class AppSettings {
         wisprFlowHelperBundleID,
     ]
 
-    init() {
+    /// Apps known to do dictation. Shown here for reference and used by
+    /// diagnostics; only Wispr Flow is a default trigger, because Granola also
+    /// uses the mic for whole-meeting transcription (see README).
+    static let knownDictationBundleIDs: Set<String> = [
+        wisprFlowBundleID,
+        wisprFlowHelperBundleID,
+        "com.granola.app",
+    ]
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        isEnabled = defaults.object(forKey: Keys.isEnabled) as? Bool ?? true
+        duckLevel = Self.clampDuckLevel(defaults.object(forKey: Keys.duckLevel) as? Int ?? 10)
+        duckAllApps = defaults.object(forKey: Keys.duckAllApps) as? Bool ?? false
+        triggerAllApps = defaults.object(forKey: Keys.triggerAllApps) as? Bool ?? false
+        hasCompletedOnboarding = defaults.object(forKey: Keys.hasCompletedOnboarding) as? Bool ?? false
+
         // register(defaults:) provides values only when the key has never been written.
         // No @AppStorage wrapper on these keys, so nothing pre-empts the registration.
-        var defaults: [String: Any] = [:]
-        if let data = try? JSONEncoder().encode(Self.defaultDuckBundleIDs),
-           let json = String(data: data, encoding: .utf8) {
-            defaults[duckBundleIDsKey] = json
+        var registered: [String: Any] = [:]
+        if let json = Self.encode(Self.defaultDuckBundleIDs) {
+            registered[Keys.duckBundleIDs] = json
         }
-        if let data = try? JSONEncoder().encode(Self.defaultTriggerBundleIDs),
-           let json = String(data: data, encoding: .utf8) {
-            defaults[triggerBundleIDsKey] = json
+        if let json = Self.encode(Self.defaultTriggerBundleIDs) {
+            registered[Keys.triggerBundleIDs] = json
         }
-        UserDefaults.standard.register(defaults: defaults)
+        defaults.register(defaults: registered)
         migrateWisprFlowHelperTriggerSelection()
     }
 
     // MARK: - Duck Target Bundle IDs
 
     var enabledBundleIDs: Set<String> {
-        get { decodeBundleIDs(key: duckBundleIDsKey) }
-        set { encodeBundleIDs(newValue, key: duckBundleIDsKey) }
+        get { decodeBundleIDs(key: Keys.duckBundleIDs) }
+        set { encodeBundleIDs(newValue, key: Keys.duckBundleIDs) }
     }
 
     func isBundleIDEnabled(_ bundleID: String) -> Bool {
@@ -109,8 +144,8 @@ final class AppSettings {
     // MARK: - Trigger Bundle IDs
 
     var triggerBundleIDs: Set<String> {
-        get { decodeBundleIDs(key: triggerBundleIDsKey) }
-        set { encodeBundleIDs(newValue, key: triggerBundleIDsKey) }
+        get { decodeBundleIDs(key: Keys.triggerBundleIDs) }
+        set { encodeBundleIDs(newValue, key: Keys.triggerBundleIDs) }
     }
 
     func isTriggerBundleIDEnabled(_ bundleID: String) -> Bool {
@@ -134,31 +169,41 @@ final class AppSettings {
 
     // MARK: - Helpers
 
-    private func decodeBundleIDs(key: String) -> Set<String> {
-        guard let json = UserDefaults.standard.string(forKey: key),
+    /// Decode a stored bundle ID set. Shared with diagnostics.
+    static func decodeBundleIDs(json: String?) -> Set<String>? {
+        guard let json,
               let data = json.data(using: .utf8),
               let ids = try? JSONDecoder().decode(Set<String>.self, from: data) else {
-            return []
+            return nil
         }
         return ids
     }
 
+    /// Encode with sorted keys so the stored JSON is stable across launches.
+    static func encode(_ ids: Set<String>) -> String? {
+        guard let data = try? JSONEncoder().encode(ids.sorted()) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private func decodeBundleIDs(key: String) -> Set<String> {
+        Self.decodeBundleIDs(json: defaults.string(forKey: key)) ?? []
+    }
+
     private func encodeBundleIDs(_ ids: Set<String>, key: String) {
-        if let data = try? JSONEncoder().encode(ids),
-           let json = String(data: data, encoding: .utf8) {
-            UserDefaults.standard.set(json, forKey: key)
+        if let json = Self.encode(ids) {
+            defaults.set(json, forKey: key)
         }
     }
 
     private func migrateWisprFlowHelperTriggerSelection() {
-        guard !UserDefaults.standard.bool(forKey: wisprFlowHelperTriggerMigrationKey) else { return }
+        guard !defaults.bool(forKey: Keys.wisprFlowHelperTriggerMigration) else { return }
 
         var ids = triggerBundleIDs
-        if ids.contains(wisprFlowBundleID), !ids.contains(wisprFlowHelperBundleID) {
-            ids.insert(wisprFlowHelperBundleID)
+        if ids.contains(Self.wisprFlowBundleID), !ids.contains(Self.wisprFlowHelperBundleID) {
+            ids.insert(Self.wisprFlowHelperBundleID)
             triggerBundleIDs = ids
         }
 
-        UserDefaults.standard.set(true, forKey: wisprFlowHelperTriggerMigrationKey)
+        defaults.set(true, forKey: Keys.wisprFlowHelperTriggerMigration)
     }
 }

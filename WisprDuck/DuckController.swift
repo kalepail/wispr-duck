@@ -1,19 +1,28 @@
 import Foundation
 import Combine
+import os
+
+private let logger = Logger(subsystem: "com.wisprduck", category: "DuckController")
 
 final class DuckController: ObservableObject {
     @Published private(set) var isDucked: Bool = false
     @Published private(set) var audioApps: [AudioApp] = []
     @Published private(set) var triggerEligibleApps: [AudioApp] = []
     @Published private(set) var audioStatusMessage: String?
-    let micMonitor = MicMonitor()
-    private let tapManager = ProcessTapManager()
+    private let micMonitor: MicTriggerSource
+    private let tapManager: ProcessTapManager
     private var settings: AppSettings
     private var cancellables = Set<AnyCancellable>()
     private var triggerReevaluationTimer: DispatchSourceTimer?
 
-    init(settings: AppSettings) {
+    init(
+        settings: AppSettings,
+        micMonitor: MicTriggerSource = MicMonitor(),
+        tapManager: ProcessTapManager = ProcessTapManager()
+    ) {
         self.settings = settings
+        self.micMonitor = micMonitor
+        self.tapManager = tapManager
 
         // Wire the root bundle ID resolver so MicMonitor can resolve helper bundle IDs
         micMonitor.rootBundleIDResolver = { [weak self] bundleID in
@@ -43,7 +52,7 @@ final class DuckController: ObservableObject {
         // Forward micMonitor changes so views observing DuckController
         // also see MicMonitor property updates (e.g., isMicActive for status text).
         // Needed because @ObservedObject doesn't observe nested ObservableObjects.
-        micMonitor.objectWillChange
+        micMonitor.stateWillChangePublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
@@ -51,7 +60,10 @@ final class DuckController: ObservableObject {
             .store(in: &cancellables)
 
         // React to filtered trigger signal instead of raw mic state
-        micMonitor.$shouldTriggerDuck
+        // Only react to changes: the source re-publishes the same value on every
+        // re-evaluation, and each extra restore would restart the fade-out.
+        micMonitor.shouldTriggerDuckPublisher
+            .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] shouldDuck in
                 self?.handleTriggerStateChange(shouldDuck: shouldDuck)
@@ -105,11 +117,11 @@ final class DuckController: ObservableObject {
                 duck()
             }
         } else {
-            if isDucked {
-                restore()
-            } else {
-                stopTriggerReevaluationTimer()
-            }
+            // Always end the session, even when no taps were created. A session
+            // can be active with zero taps (no target app was playing when the
+            // mic started). Leaving it open made apps that started later get
+            // ducked while the mic was idle.
+            restore()
         }
     }
 
@@ -124,16 +136,22 @@ final class DuckController: ObservableObject {
             duckLevel: duckLevel
         )
 
+        logger.info("Duck requested at \(self.settings.duckLevel)%; active taps: \(self.tapManager.activeTapCount)")
+
+        // No taps is not an error by itself: often no target app is playing.
+        // Real failures (no output device, tap start errors) arrive through
+        // the tap manager's error handler with a specific message.
         if isDucked {
             audioStatusMessage = nil
             startTriggerReevaluationTimer()
-        } else if audioStatusMessage == nil {
-            audioStatusMessage = "WisprDuck could not start system audio capture. Grant Screen & System Audio Recording permission."
         }
     }
 
     private func restore() {
         stopTriggerReevaluationTimer()
+        if tapManager.isSessionActive || tapManager.activeTapCount > 0 {
+            logger.info("Restoring audio; active taps: \(self.tapManager.activeTapCount)")
+        }
         tapManager.restoreAllWithFade()
         isDucked = false
     }

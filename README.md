@@ -65,8 +65,42 @@ Click the duck foot icon in your menu bar:
 |---------|-------------|
 | **Enable Monitoring** | Toggle WisprDuck on/off |
 | **Duck Level** | Target volume when ducked — 0% is silent, 100% is full volume (default 10%) |
-| **Trigger All Apps** | Duck on any mic use, or toggle off to pick specific trigger apps |
-| **Duck All Apps** | Duck every audio app, or toggle off to pick specific apps to duck |
+| **Trigger All Apps** | Duck when any app records from the mic, or toggle off to pick specific trigger apps |
+| **Duck All Apps** | Duck every app that is playing audio, or toggle off to pick specific apps to duck |
+
+**Trigger All Apps** uses per-process mic input only, so playback through an audio interface with inputs (for example a Focusrite Scarlett) does not count as mic use. **Duck All Apps** skips system audio daemons, and it picks up an app that starts playing during a dictation within about 0.5 s.
+
+## Using with Granola Voice Typing
+
+[Granola](https://granola.ai) Voice Typing (hold `fn`, speak, release) works as a trigger:
+
+1. Turn on Voice Typing in Granola: **Settings → Voice typing**.
+2. Dictate once, so Granola appears in WisprDuck's trigger list.
+3. Open the WisprDuck menu, turn off **Trigger All Apps**, and turn on **Granola**.
+
+Granola records in a helper process (`Granola Helper`). WisprDuck resolves the helper to `com.granola.app`, so selecting Granola is enough. Granola opens the mic about 0.3 s after you press the shortcut and closes it within about 0.5 s after you release it, so ducking follows each dictation.
+
+> **Meetings:** Granola also uses the mic for the whole length of meeting transcription. With Granola selected as a trigger, WisprDuck ducks your target apps for the whole meeting. Browsers are default duck targets, so a browser meeting (Google Meet, etc.) also gets quieter. Granola is not a default trigger for this reason. If you use Granola for meetings, remove your meeting app or browser from the duck targets, or turn off the Granola trigger during meetings.
+
+> **Shortcut conflict:** Wispr Flow and Granola both use `fn` by default. If both apps are running, change one shortcut.
+
+### Checking any dictation app
+
+`scripts/mic-probe.sh` shows which processes use the mic, the app bundle IDs that WisprDuck sees for them, and whether your current trigger settings would duck. It uses the app's own matching code.
+
+```bash
+./scripts/mic-probe.sh --seconds 20 --trigger com.granola.app
+```
+
+Start and stop a dictation while it runs. Example output for Granola:
+
+```text
+[10:28:28.882] mic in use by 1 process(es) → WisprDuck would DUCK
+  pid 48903 Granola Helper
+    ancestry: com.granola.app
+    root app: com.granola.app
+[10:28:32.626] mic idle → WisprDuck would not duck
+```
 
 ## Requirements
 
@@ -90,7 +124,21 @@ For command-line verification:
 ./scripts/verify.sh
 ```
 
-That validates plist/project files, builds the native app in Debug and Release with signing disabled, and runs the site lint/build checks.
+That validates plist/project files, runs the unit tests, builds the mic probe, builds the native app in Debug and Release with signing disabled, and runs the site lint/build checks.
+
+To run only the unit tests:
+
+```bash
+xcodebuild -project WisprDuck.xcodeproj -scheme WisprDuck CODE_SIGNING_ALLOWED=NO test
+```
+
+The `WisprDuckTests` bundle compiles the app's non-UI sources directly and replaces Core Audio with fakes, so it does not launch the app, touch your audio, or read your saved settings. It covers trigger matching (including Granola and Wispr Flow helpers), the gain ramp, settings and migrations, tap lifecycle, and the duck/restore state machine.
+
+To see WisprDuck's duck and restore decisions live:
+
+```bash
+log stream --level info --predicate 'subsystem == "com.wisprduck"'
+```
 
 ## Release Builds
 
