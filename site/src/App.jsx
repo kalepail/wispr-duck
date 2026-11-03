@@ -2,10 +2,22 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { Code } from 'pixelarticons/react/Code'
+import { Download as DownloadIcon } from 'pixelarticons/react/Download'
+import { Mic } from 'pixelarticons/react/Mic'
+import { Shield } from 'pixelarticons/react/Shield'
+import { Sliders } from 'pixelarticons/react/Sliders'
+import { Volume2 } from 'pixelarticons/react/Volume2'
+import { Zap } from 'pixelarticons/react/Zap'
+// The release skill bumps site/package.json, so the download link follows each release.
+import { version as VERSION } from '../package.json'
 
 const GITHUB_URL = 'https://github.com/kalepail/wispr-duck'
 const TWITTER_URL = 'https://x.com/kalepail'
 const GITHUB_PROFILE_URL = 'https://github.com/kalepail'
+const DOWNLOAD_URL = `${GITHUB_URL}/releases/download/v${VERSION}/WisprDuck-${VERSION}.zip`
+const RELEASE_NOTES_URL = `${GITHUB_URL}/releases/tag/v${VERSION}`
+const RELEASES_URL = `${GITHUB_URL}/releases`
 
 function DuckFootIcon({ className, decorative = false }) {
   return (
@@ -113,39 +125,39 @@ function CrosshairDecor() {
 
 const features = [
   {
-    icon: '\u{1F3AF}',
+    Icon: Mic,
     title: 'Per-App Triggers',
-    description: 'Choose which apps trigger ducking. Defaults to Wispr Flow \u2014 add any mic-using app you want.',
+    description: 'Pick the apps that trigger ducking. Wispr Flow is on by default, and Granola Voice Typing is one switch away.',
     color: 'text-pixel-green',
   },
   {
-    icon: '\u{1F3AE}',
-    title: 'Smooth Volume Fading',
-    description: 'Linear 1-second volume transitions. No harsh jumps \u2014 just buttery-smooth audio ducking.',
+    Icon: Volume2,
+    title: 'Smooth Restore',
+    description: 'Audio ducks the moment your mic turns on, then fades back up over about 1 second when you stop talking.',
     color: 'text-pixel-orange',
   },
   {
-    icon: '\u{1F4A5}',
+    Icon: Sliders,
     title: 'Selective Ducking',
-    description: 'Duck all audio or pick specific apps. Spotify, Chrome, Arc, Safari \u2014 20+ apps supported out of the box.',
+    description: 'Duck all audio, or only the apps you pick. Spotify, Chrome, Arc, Safari and 16 more are ready out of the box.',
     color: 'text-pixel-blue',
   },
   {
-    icon: '\u{1F6E1}\uFE0F',
+    Icon: Shield,
     title: 'Crash-Safe',
-    description: 'Uses Core Audio\u2019s mutedWhenTapped \u2014 audio auto-restores even if WisprDuck quits unexpectedly.',
+    description: 'Ducked apps are muted at the source by Core Audio, so their sound comes back even if WisprDuck quits unexpectedly.',
     color: 'text-pixel-yellow',
   },
   {
-    icon: '\u26A1',
+    Icon: Zap,
     title: 'Lightweight',
-    description: 'Event-driven Core Audio listeners \u2014 no polling. Minimal CPU usage sitting in your menu bar.',
+    description: 'Core Audio tells WisprDuck when your mic changes. Nothing polls while you are idle, so it sits in your menu bar at near-zero CPU.',
     color: 'text-pixel-teal',
   },
   {
-    icon: '\u{1F4E6}',
+    Icon: Code,
     title: 'Open Source',
-    description: 'Apache 2.0 licensed. Inspect, modify, and contribute on GitHub.',
+    description: 'Apache 2.0 licensed. Read the code, change it, and contribute on GitHub.',
     color: 'text-pixel-green',
   },
 ]
@@ -158,34 +170,53 @@ function SkipLink() {
   )
 }
 
+const navLink = 'font-pixel text-[10px] text-pixel-green/70 hover:text-pixel-green tracking-wide py-3 select-none'
+const iconLink = 'text-pixel-green/70 hover:text-pixel-green p-2.5 -m-0.5'
+
 function Navbar() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-40 bg-hunter-dark/90 backdrop-blur-sm border-b-2 border-hunter-border" aria-label="Main navigation">
-      <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-        <a href="#" className="flex items-center gap-2.5 min-w-0 group py-2">
-          <DuckFootIcon className="w-7 h-7 text-pixel-green shrink-0 transition-transform group-hover:scale-110" decorative />
+      <div className="max-w-6xl mx-auto px-5 sm:px-6 h-16 flex items-center justify-between gap-4">
+        <a href="#" className="flex items-center gap-2.5 min-w-0 group py-2 select-none" aria-label="WisprDuck home">
+          <DuckFootIcon className="w-7 h-7 text-pixel-green shrink-0" decorative />
           <span className="font-pixel text-sm text-pixel-green tracking-wide">WISPRDUCK</span>
         </a>
-        <div className="flex items-center gap-5 sm:gap-6">
-          <a href="#features" className="font-pixel text-[10px] text-pixel-green/50 hover:text-pixel-green transition-colors hidden sm:block tracking-wide py-2">FEATURES</a>
-          <a href="#how-it-works" className="font-pixel text-[10px] text-pixel-green/50 hover:text-pixel-green transition-colors hidden sm:block tracking-wide py-2">HOW</a>
-          <a href="#download" className="font-pixel text-[10px] text-pixel-green/50 hover:text-pixel-green transition-colors hidden sm:block tracking-wide py-2">DOWNLOAD</a>
+        <div className="flex items-center gap-4 sm:gap-6">
+          <a href="#how-it-works" className={`${navLink} hidden sm:block`}>HOW IT WORKS</a>
+          <a href="#features" className={`${navLink} hidden sm:block`}>FEATURES</a>
+          <a href="#download" className={navLink}>DOWNLOAD</a>
           <Separator orientation="vertical" className="h-5 bg-hunter-border hidden sm:block" />
-          <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" className="text-pixel-green/50 hover:text-pixel-green transition-colors p-2" aria-label="WisprDuck on GitHub">
-            <GitHubIcon className="w-6 h-6" />
-          </a>
-          <a href={TWITTER_URL} target="_blank" rel="noopener noreferrer" className="text-pixel-green/50 hover:text-pixel-green transition-colors p-2" aria-label="@kalepail on X (Twitter)">
-            <XIcon className="w-6 h-6" />
-          </a>
+          <div className="flex items-center gap-1 sm:gap-3">
+            <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" className={iconLink} aria-label="WisprDuck on GitHub" title="WisprDuck on GitHub">
+              <GitHubIcon className="w-6 h-6 shrink-0" />
+            </a>
+            <a href={TWITTER_URL} target="_blank" rel="noopener noreferrer" className={`${iconLink} hidden min-[400px]:block`} aria-label="@kalepail on X" title="@kalepail on X">
+              <XIcon className="w-6 h-6 shrink-0" />
+            </a>
+          </div>
         </div>
       </div>
     </nav>
   )
 }
 
+const primaryButton = 'font-pixel text-sm tracking-wider bg-pixel-green text-hunter-dark hover:bg-[#6ee7a0] border-2 border-pixel-green-dim px-8 sm:px-10 py-7 rounded-none pixel-border shadow-[0_0_20px_rgba(74,222,128,0.3)] select-none'
+
+function ReleaseMeta() {
+  return (
+    <p className="text-sm text-ink-3">
+      {`Version ${VERSION} · macOS 14.2+ · Free`}
+      {' · '}
+      <a href={RELEASE_NOTES_URL} target="_blank" rel="noopener noreferrer" className="text-ink-2 underline underline-offset-4 decoration-ink-3 hover:text-pixel-green hover:decoration-pixel-green">
+        Release notes
+      </a>
+    </p>
+  )
+}
+
 function Hero() {
   return (
-    <section className="relative pt-24 sm:pt-32 pb-24 sm:pb-32 px-6 overflow-hidden bg-gradient-to-b from-sky-top via-hunter-dark to-hunter-bg" aria-labelledby="hero-heading">
+    <section className="relative pt-28 sm:pt-36 pb-24 sm:pb-32 px-5 sm:px-6 overflow-hidden bg-gradient-to-b from-sky-top via-hunter-dark to-hunter-bg" aria-labelledby="hero-heading">
       <PixelStars />
       <CrosshairDecor />
 
@@ -194,8 +225,8 @@ function Hero() {
       <div className="absolute bottom-1/4 right-1/5 w-48 sm:w-72 h-48 sm:h-72 bg-pixel-orange/5 rounded-full blur-3xl" aria-hidden="true" />
 
       <div className="relative z-10 text-center max-w-4xl mx-auto">
-        <Badge variant="outline" className="mb-8 border-pixel-green/30 bg-hunter-card/50 text-pixel-green font-pixel text-[10px] tracking-wider px-5 py-2.5">
-          <span className="w-2 h-2 bg-pixel-green rounded-none animate-blink inline-block mr-2" aria-hidden="true" />
+        <Badge variant="outline" className="mb-8 border-pixel-green/30 bg-hunter-card/50 text-pixel-green font-pixel text-[10px] tracking-wider px-4 py-2 gap-2.5 rounded-none select-none">
+          <span className="w-2 h-2 bg-pixel-green rounded-none animate-blink inline-block" aria-hidden="true" />
           FREE &amp; OPEN SOURCE
         </Badge>
 
@@ -203,34 +234,30 @@ function Hero() {
           WISPRDUCK
         </h1>
 
-        <p className="font-pixel text-sm sm:text-base text-pixel-orange mb-4 text-glow-orange tracking-wide">
-          {'Shhh\u2026 Ducking volume.'}
+        <p className="font-pixel text-sm sm:text-base text-pixel-orange mb-5 text-glow-orange tracking-wide">
+          {'Shhh… Ducking volume.'}
         </p>
 
-        <p className="text-base sm:text-lg text-[#a3b89a] max-w-2xl mx-auto mb-10 leading-relaxed">
+        <p className="text-base sm:text-lg text-ink-2 max-w-[38rem] mx-auto mb-10 leading-relaxed text-balance">
           A lightweight macOS menu bar app that{' '}
-          <strong className="text-pixel-green font-semibold">automatically reduces background audio</strong>{' '}
-          when your microphone is active. Built for{' '}
-          <strong className="text-pixel-orange font-semibold">Wispr Flow</strong>
-          {' '}and perfect for video&nbsp;calls, voice&#8209;to&#8209;text, and screen&nbsp;recordings.
+          <strong className="text-pixel-green font-semibold">turns down background audio</strong>{' '}
+          while your mic is on. Built for{' '}
+          <strong className="text-pixel-orange font-semibold">Wispr Flow</strong>, works with Granola Voice Typing, and
+          fits video&nbsp;calls and screen&nbsp;recordings too.
         </p>
 
-        <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12 sm:mb-16">
-          <Button
-            asChild
-            size="lg"
-            className="font-pixel text-sm tracking-wider bg-pixel-green text-hunter-dark hover:bg-pixel-green/90 border-2 border-pixel-green-dim px-10 py-7 rounded-none pixel-border shadow-[0_0_20px_rgba(74,222,128,0.3)] hover:shadow-[0_0_30px_rgba(74,222,128,0.5)] transition-shadow"
-          >
-            <a href={`${GITHUB_URL}/releases`} target="_blank" rel="noopener noreferrer">
-              <GitHubIcon className="w-5 h-5" />
-              PRESS START
+        <div className="flex flex-col sm:flex-row gap-4 justify-center mb-5">
+          <Button asChild size="lg" className={primaryButton}>
+            <a href={DOWNLOAD_URL}>
+              <DownloadIcon className="size-6 shrink-0" aria-hidden="true" />
+              DOWNLOAD FOR MAC
             </a>
           </Button>
           <Button
             asChild
             variant="outline"
             size="lg"
-            className="font-pixel text-sm tracking-wider border-2 border-hunter-border text-pixel-green/70 hover:text-pixel-green hover:border-pixel-green/30 bg-hunter-card/30 px-10 py-7 rounded-none"
+            className="font-pixel text-sm tracking-wider border-2 border-hunter-border text-pixel-green/80 hover:text-pixel-green hover:border-pixel-green/40 bg-hunter-card/30 px-8 sm:px-10 py-7 rounded-none select-none"
           >
             <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
               VIEW SOURCE
@@ -238,13 +265,19 @@ function Hero() {
           </Button>
         </div>
 
+        <div className="mb-12 sm:mb-16">
+          <ReleaseMeta />
+        </div>
+
         {/* Main banner showcase */}
         <div className="relative max-w-3xl mx-auto">
-          <div className="absolute -inset-1 bg-gradient-to-b from-pixel-green/20 via-pixel-orange/10 to-transparent rounded-sm blur-sm" aria-hidden="true" />
-          <div className="relative border-2 border-hunter-border overflow-hidden rounded-sm pixel-border bg-hunter-dark">
+          <div className="absolute -inset-1 bg-gradient-to-b from-pixel-green/20 via-pixel-orange/10 to-transparent blur-sm" aria-hidden="true" />
+          <div className="relative border-2 border-hunter-border overflow-hidden bg-hunter-dark">
             <img
               src="/banner-fun-3.png"
-              alt="Four retro pixel art panels showing WisprDuck installation screens with duck hunter game aesthetics, featuring pixel ducks and CRT monitors"
+              alt="Four retro pixel art panels of a duck with headphones: installing, loading the mic, ready, and press start to install"
+              width="1408"
+              height="768"
               className="w-full h-auto block"
               loading="eager"
               fetchpriority="high"
@@ -261,28 +294,28 @@ function Hero() {
 
 function HowItWorks() {
   const steps = [
-    { num: '01', label: 'DETECT', desc: 'Core Audio listener fires when a trigger app activates the mic. Choose which apps or allow all.', color: 'text-pixel-green', border: 'border-pixel-green/30', glow: 'shadow-[0_0_10px_rgba(74,222,128,0.15)]' },
-    { num: '02', label: 'TAP', desc: 'Process taps are created for target apps, intercepting their audio output.', color: 'text-pixel-orange', border: 'border-pixel-orange/30', glow: 'shadow-[0_0_10px_rgba(251,146,60,0.15)]' },
-    { num: '03', label: 'SCALE', desc: 'Intercepted audio is scaled by your chosen duck level and played through.', color: 'text-pixel-blue', border: 'border-pixel-blue/30', glow: 'shadow-[0_0_10px_rgba(56,189,248,0.15)]' },
-    { num: '04', label: 'RESTORE', desc: `When the mic goes idle, volume ramps back up smoothly over ~1\u00A0second.`, color: 'text-pixel-yellow', border: 'border-pixel-yellow/30', glow: 'shadow-[0_0_10px_rgba(250,204,21,0.15)]' },
+    { num: '01', label: 'DETECT', desc: 'A trigger app turns on your mic. Pick the apps, or let any app count.', color: 'text-pixel-green', border: 'border-pixel-green/30', glow: 'shadow-[0_0_10px_rgba(74,222,128,0.15)]' },
+    { num: '02', label: 'TAP', desc: 'WisprDuck takes over the sound of the apps you chose to duck.', color: 'text-pixel-orange', border: 'border-pixel-orange/30', glow: 'shadow-[0_0_10px_rgba(251,146,60,0.15)]' },
+    { num: '03', label: 'DUCK', desc: 'Their audio keeps playing at your duck level, 10% by default.', color: 'text-pixel-blue', border: 'border-pixel-blue/30', glow: 'shadow-[0_0_10px_rgba(56,189,248,0.15)]' },
+    { num: '04', label: 'RESTORE', desc: 'Your mic turns off, and the volume fades back up over about 1 second.', color: 'text-pixel-yellow', border: 'border-pixel-yellow/30', glow: 'shadow-[0_0_10px_rgba(250,204,21,0.15)]' },
   ]
 
   return (
-    <section id="how-it-works" className="relative py-20 sm:py-28 px-6 scroll-mt-20 bg-hunter-bg" aria-labelledby="how-heading">
+    <section id="how-it-works" className="relative py-20 sm:py-28 px-5 sm:px-6 scroll-mt-16 bg-hunter-bg" aria-labelledby="how-heading">
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-12 sm:mb-16">
           <h2 id="how-heading" className="font-pixel text-lg sm:text-2xl text-pixel-green text-glow-green mb-4">HOW IT WORKS</h2>
-          <p className="text-[#6b8f6e] max-w-xl mx-auto">Four simple steps. Zero configuration. Just install and go.</p>
+          <p className="text-ink-2 max-w-xl mx-auto text-balance">Four steps, every time you talk. You set it up once.</p>
         </div>
 
         <ol className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 list-none p-0 m-0">
           {steps.map(step => (
             <li key={step.num}>
-              <Card className={`bg-hunter-card/60 border-2 ${step.border} rounded-none pixel-border ${step.glow} hover:scale-[1.02] transition-transform h-full`}>
-                <CardContent className="pt-6">
-                  <span className={`font-pixel text-3xl ${step.color} opacity-30 block`} aria-hidden="true">{step.num}</span>
+              <Card className={`bg-hunter-card/60 border-2 ${step.border} rounded-none pixel-border ${step.glow} h-full`}>
+                <CardContent>
+                  <span className={`font-pixel text-3xl ${step.color} opacity-40 block select-none`} aria-hidden="true">{step.num}</span>
                   <h3 className={`font-pixel text-xs mt-3 ${step.color} tracking-wider`}>{step.label}</h3>
-                  <p className="text-[#6b8f6e] mt-3 text-sm leading-relaxed">{step.desc}</p>
+                  <p className="text-ink-2 mt-3 text-sm leading-relaxed">{step.desc}</p>
                 </CardContent>
               </Card>
             </li>
@@ -295,27 +328,28 @@ function HowItWorks() {
 
 function Features() {
   return (
-    <section id="features" className="relative py-20 sm:py-28 px-6 scroll-mt-20 bg-hunter-dark" aria-labelledby="features-heading">
+    <section id="features" className="relative py-20 sm:py-28 px-5 sm:px-6 scroll-mt-16 bg-hunter-dark" aria-labelledby="features-heading">
       <CrosshairDecor />
       <div className="relative z-10 max-w-6xl mx-auto">
         <div className="text-center mb-12 sm:mb-16">
           <h2 id="features-heading" className="font-pixel text-lg sm:text-2xl text-pixel-orange text-glow-orange mb-4">POWER-UPS</h2>
-          <p className="text-[#6b8f6e] max-w-xl mx-auto">Built with Core Audio process taps for rock-solid, low-latency audio ducking.</p>
+          <p className="text-ink-2 max-w-xl mx-auto text-balance">Built on Core Audio process taps, so ducking is fast and stays out of your way.</p>
         </div>
 
-        <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 list-none p-0 m-0">
-          {features.map(feature => (
-            <li key={feature.title}>
-              <Card className="bg-hunter-card/40 border-2 border-hunter-border rounded-none pixel-border hover:border-pixel-green/20 hover:shadow-[0_0_15px_rgba(74,222,128,0.1)] transition-all h-full">
-                <CardContent className="pt-6">
-                  <span className="text-2xl mb-2 block" role="img" aria-label={feature.title}>{feature.icon}</span>
-                  <h3 className={`font-pixel text-xs tracking-wider mb-3 ${feature.color}`}>{feature.title.toUpperCase()}</h3>
-                  <p className="text-[#6b8f6e] text-sm leading-relaxed">{feature.description}</p>
+        <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 m-0">
+          {features.map(feature => {
+            const FeatureIcon = feature.Icon
+            return (
+              <Card key={feature.title} className="bg-hunter-card/40 border-2 border-hunter-border rounded-none pixel-border h-full gap-0">
+                <CardContent>
+                  <FeatureIcon className={`size-6 shrink-0 ${feature.color}`} aria-hidden="true" />
+                  <dt className={`font-pixel text-xs tracking-wider mt-4 mb-3 ${feature.color}`}>{feature.title.toUpperCase()}</dt>
+                  <dd className="text-ink-2 text-sm leading-relaxed m-0">{feature.description}</dd>
                 </CardContent>
               </Card>
-            </li>
-          ))}
-        </ul>
+            )
+          })}
+        </dl>
       </div>
     </section>
   )
@@ -323,27 +357,27 @@ function Features() {
 
 function ScoreBoard() {
   const stats = [
-    { label: 'CPU USAGE', value: '~0%', note: 'Event-driven, no polling' },
-    { label: 'FADE TIME', value: '~1s', note: 'Smooth linear ramp' },
+    { label: 'CPU USAGE', value: '~0%', note: 'No polling while idle' },
+    { label: 'RESTORE', value: '~1s', note: 'Smooth fade back up' },
     { label: 'PRICE', value: 'FREE', note: 'Apache 2.0 license' },
-    { label: 'REQUIRES', value: '14.2+', note: 'macOS Sonoma' },
+    { label: 'REQUIRES', value: '14.2+', note: 'macOS Sonoma or later' },
   ]
 
   return (
-    <section className="py-16 sm:py-20 px-6 bg-hunter-bg border-y-2 border-hunter-border">
+    <section className="py-16 sm:py-20 px-5 sm:px-6 bg-hunter-bg border-y-2 border-hunter-border" aria-labelledby="scores-heading">
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-10">
-          <h2 className="font-pixel text-base sm:text-lg text-pixel-yellow tracking-wider">HIGH SCORES</h2>
+          <h2 id="scores-heading" className="font-pixel text-base sm:text-lg text-pixel-yellow tracking-wider">HIGH SCORES</h2>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <dl className="grid grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-8 m-0">
           {stats.map(stat => (
-            <div key={stat.label} className="text-center py-4">
-              <div className="font-pixel text-2xl sm:text-3xl text-pixel-green text-glow-green mb-2">{stat.value}</div>
-              <div className="font-pixel text-[10px] sm:text-xs text-pixel-orange/70 tracking-wider mb-1">{stat.label}</div>
-              <div className="text-xs text-[#6b8f6e]">{stat.note}</div>
+            <div key={stat.label} className="text-center py-2 flex flex-col">
+              <dt className="font-pixel text-[10px] sm:text-xs text-pixel-orange tracking-wider mb-2 order-2">{stat.label}</dt>
+              <dd className="font-pixel text-2xl sm:text-3xl text-pixel-green text-glow-green mb-3 order-1 m-0">{stat.value}</dd>
+              <dd className="text-xs text-ink-3 order-3 m-0">{stat.note}</dd>
             </div>
           ))}
-        </div>
+        </dl>
       </div>
     </section>
   )
@@ -351,30 +385,32 @@ function ScoreBoard() {
 
 function Download() {
   return (
-    <section id="download" className="relative py-20 sm:py-28 px-6 scroll-mt-20 bg-gradient-to-b from-hunter-dark via-hunter-bg to-hunter-dark" aria-labelledby="download-heading">
+    <section id="download" className="relative py-20 sm:py-28 px-5 sm:px-6 scroll-mt-16 bg-gradient-to-b from-hunter-dark via-hunter-bg to-hunter-dark" aria-labelledby="download-heading">
       <div className="absolute inset-0 bg-gradient-to-b from-transparent via-pixel-green/[0.02] to-transparent" aria-hidden="true" />
       <div className="relative z-10 max-w-3xl mx-auto text-center">
         <DuckFootIcon className="w-14 h-14 text-pixel-green mx-auto mb-6 drop-shadow-[0_0_10px_rgba(74,222,128,0.4)]" decorative />
 
-        <h2 id="download-heading" className="font-pixel text-lg sm:text-2xl text-pixel-green text-glow-green mb-3">READY PLAYER ONE?</h2>
+        <h2 id="download-heading" className="font-pixel text-lg sm:text-2xl text-pixel-green text-glow-green mb-4">READY PLAYER ONE?</h2>
 
-        <p className="text-[#6b8f6e] text-lg mb-10 max-w-lg mx-auto">
-          Download WisprDuck for free from GitHub. Requires macOS&nbsp;14.2+ (Sonoma).
+        <p className="text-ink-2 text-lg mb-10 max-w-md mx-auto text-balance">
+          Get WisprDuck {VERSION} for free. It runs on macOS&nbsp;14.2 (Sonoma) or later.
         </p>
 
-        <Button
-          asChild
-          size="lg"
-          className="font-pixel text-sm tracking-wider bg-pixel-green text-hunter-dark hover:bg-pixel-green/90 border-2 border-pixel-green-dim px-12 py-7 rounded-none pixel-border shadow-[0_0_20px_rgba(74,222,128,0.3)] hover:shadow-[0_0_40px_rgba(74,222,128,0.5)] transition-shadow"
-        >
-          <a href={`${GITHUB_URL}/releases`} target="_blank" rel="noopener noreferrer">
-            <GitHubIcon className="w-6 h-6" />
-            INSERT COIN
+        <Button asChild size="lg" className={`${primaryButton} px-10 sm:px-12`}>
+          <a href={DOWNLOAD_URL}>
+            <DownloadIcon className="size-6 shrink-0" aria-hidden="true" />
+            DOWNLOAD FOR MAC
           </a>
         </Button>
 
-        <p className="font-pixel text-[10px] text-[#6b8f6e]/50 mt-8 tracking-wider">
-          APACHE 2.0 LICENSE {'\u00B7'} FREE FOREVER
+        <p className="text-sm text-ink-3 mt-6">
+          <a href={RELEASE_NOTES_URL} target="_blank" rel="noopener noreferrer" className="text-ink-2 underline underline-offset-4 decoration-ink-3 hover:text-pixel-green hover:decoration-pixel-green">
+            {`What’s new in ${VERSION}`}
+          </a>
+          {' · '}
+          <a href={RELEASES_URL} target="_blank" rel="noopener noreferrer" className="text-ink-2 underline underline-offset-4 decoration-ink-3 hover:text-pixel-green hover:decoration-pixel-green">
+            All releases
+          </a>
         </p>
       </div>
     </section>
@@ -382,42 +418,28 @@ function Download() {
 }
 
 function Footer() {
+  const footerLink = 'flex items-center gap-2 text-ink-3 hover:text-pixel-green py-3 select-none'
   return (
-    <footer className="border-t-2 border-hunter-border py-8 sm:py-10 px-6 bg-hunter-dark" role="contentinfo">
+    <footer className="border-t-2 border-hunter-border py-8 sm:py-10 px-5 sm:px-6 bg-hunter-dark">
       <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-6">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <DuckFootIcon className="w-5 h-5 text-pixel-green/50 shrink-0" decorative />
-          <span className="font-pixel text-[10px] text-[#6b8f6e]/50 tracking-wider">
-            {'WISPRDUCK \u00A9 '}
+        <div className="flex items-center gap-2.5 min-w-0 select-none">
+          <DuckFootIcon className="w-5 h-5 text-pixel-green/70 shrink-0" decorative />
+          <span className="font-pixel text-[10px] text-ink-3 tracking-wider">
+            {'WISPRDUCK © '}
             {new Date().getFullYear()}
           </span>
         </div>
 
         <nav aria-label="Social links" className="flex items-center gap-6">
-          <a
-            href={TWITTER_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 text-[#6b8f6e]/50 hover:text-pixel-green transition-colors py-2"
-          >
-            <XIcon className="w-5 h-5" />
+          <a href={TWITTER_URL} target="_blank" rel="noopener noreferrer" className={footerLink}>
+            <XIcon className="w-5 h-5 shrink-0" />
             <span className="font-pixel text-[10px] tracking-wider">@KALEPAIL</span>
           </a>
-          <a
-            href={GITHUB_PROFILE_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 text-[#6b8f6e]/50 hover:text-pixel-green transition-colors py-2"
-          >
-            <GitHubIcon className="w-5 h-5" />
+          <a href={GITHUB_PROFILE_URL} target="_blank" rel="noopener noreferrer" className={footerLink}>
+            <GitHubIcon className="w-5 h-5 shrink-0" />
             <span className="font-pixel text-[10px] tracking-wider">KALEPAIL</span>
           </a>
-          <a
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-pixel text-[10px] text-[#6b8f6e]/50 hover:text-pixel-green transition-colors tracking-wider py-2"
-          >
+          <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" className={`${footerLink} font-pixel text-[10px] tracking-wider`}>
             SOURCE
           </a>
         </nav>
@@ -428,7 +450,7 @@ function Footer() {
 
 function App() {
   return (
-    <div className="min-h-screen bg-hunter-dark text-[#e2e8d0] overflow-x-hidden">
+    <div className="min-h-screen bg-hunter-dark text-ink overflow-x-hidden">
       <div className="crt-overlay" aria-hidden="true" />
       <SkipLink />
       <Navbar />

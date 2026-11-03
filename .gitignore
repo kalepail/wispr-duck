@@ -29,3 +29,6 @@ site/dist/
 *.p12
 private_keys/
 wispr-duck-certs/
+
+# Design renders
+.design/

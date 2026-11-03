@@ -5,8 +5,12 @@
 
 @theme {
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
   --font-pixel: 'Press Start 2P', monospace;
+
+  /* Text: three levels, all at least 4.5:1 on every page surface */
+  --color-ink: #e2e8d0;
+  --color-ink-2: #a3b89a;
+  --color-ink-3: #7f9e80;
 
   /* Duck Hunter palette */
   --color-hunter-dark: #0a1a0a;
@@ -58,7 +62,7 @@
 body {
   margin: 0;
   background-color: var(--color-hunter-dark);
-  color: #e2e8d0;
+  color: var(--color-ink);
   color-scheme: dark;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -97,12 +101,22 @@ body {
   outline-offset: 2px;
 }
 
-/* Global focus-visible ring for interactive elements */
+/* Global focus-visible ring. Light, not green, so it also shows on the
+   green primary button. Square, to match the pixel style. */
 a:focus-visible,
 button:focus-visible {
-  outline: 2px solid var(--color-pixel-green);
-  outline-offset: 2px;
-  border-radius: 4px;
+  outline: 2px solid var(--color-ink);
+  outline-offset: 3px;
+  border-radius: 0;
+}
+
+/* No lone word on the last line of a heading or paragraph */
+h1, h2, h3, dt {
+  text-wrap: balance;
+}
+
+p, dd {
+  text-wrap: pretty;
 }
 
 /* CRT scanline overlay */
@@ -120,12 +134,12 @@ button:focus-visible {
   );
 }
 
-/* Pixel border effect for cards */
+/* Pixel bevel for cards and buttons. The element's own border is the edge;
+   this only adds the inner light and shadow. */
 .pixel-border {
   box-shadow:
     inset -2px -2px 0px 0px rgba(0, 0, 0, 0.4),
-    inset 2px 2px 0px 0px rgba(74, 222, 128, 0.15),
-    0 0 0 2px var(--color-hunter-border);
+    inset 2px 2px 0px 0px rgba(74, 222, 128, 0.15);
 }
 
 /* Pixel art image rendering */
